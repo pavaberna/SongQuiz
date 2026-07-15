@@ -1,0 +1,20 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Track {
+  id        Int      @id @default(autoincrement())
+  youtubeId String   @unique
+  title     String
+  artist    String
+  year      Int
+  genres    String[]
+  duration  Int
+  createdAt DateTime @default(now())
+
+  @@index([youtubeId])
+}

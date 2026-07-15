@@ -1,36 +1,110 @@
-import express, { Request, Response } from "express";
+import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
+import { generateSongList } from "./services/geminiMusicCurator";
+import {
+  readCurrentSongList,
+  saveCurrentSongList,
+} from "./services/songListStore";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is missing.");
+}
+
+const pool = new Pool({ connectionString: databaseUrl });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 app.use(cors());
 app.use(express.json());
 
-app.get("/health", (req: Request, res: Response) => {
-  res.status(200).json({
-    status: "OK",
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-    env: process.env.NODE_ENV || "development",
-  });
+app.get("/api/health", (req, res) => {
+  res.json({ status: "OK", message: "Backend is healthy" });
 });
 
-app.listen(PORT, () => {
-  console.log(`SongQuiz backend is successfully running on port: ${PORT}`);
+app.post("/api/dev/gemini-songs", async (req, res) => {
+  try {
+    const players = Number(req.body.players);
+    const decade =
+      typeof req.body.decade === "string" ? req.body.decade.trim() : "";
+    const genre =
+      typeof req.body.genre === "string" ? req.body.genre.trim() : "";
 
-  if (
-    process.env.SPOTIFY_CLIENT_ID &&
-    process.env.OPENAI_API_KEY &&
-    process.env.GEMINI_API_KEY
-  ) {
-    console.log("All required API keys successfully loaded from .env file.");
-  } else {
-    console.warn(
-      "Warning: Some API keys are missing from the environment variables!",
-    );
+    if (!Number.isInteger(players) || players < 1) {
+      res.status(400).json({ error: "players must be a positive integer." });
+      return;
+    }
+
+    if (!decade || !genre) {
+      res.status(400).json({ error: "decade and genre are required." });
+      return;
+    }
+
+    const request = { players, decade, genre };
+    const songs = await generateSongList(request);
+    const savedSongList = await saveCurrentSongList(request, songs);
+
+    res.json({
+      count: savedSongList.songs.length,
+      file: "runtime/current-song-list.json",
+      data: savedSongList,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
   }
+});
+
+app.get("/api/dev/current-songs", async (req, res) => {
+  try {
+    const savedSongList = await readCurrentSongList();
+    res.json(savedSongList);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(404).json({ error: message });
+  }
+});
+
+async function testDatabaseConnection() {
+  try {
+    console.log("Connecting to the database and saving test record...");
+
+    const testTrack = await prisma.track.upsert({
+      where: { youtubeId: "dQw4w9WgXcQ" },
+      update: {},
+      create: {
+        youtubeId: "dQw4w9WgXcQ",
+        title: "Never Gonna Give You Up",
+        artist: "Rick Astley",
+        year: 1987,
+        duration: 212,
+        genres: ["Pop"],
+      },
+    });
+
+    console.log("Successfully saved or verified track:", testTrack.title);
+
+    const allTracks = await prisma.track.findMany();
+    console.log(
+      `Database read successful. Total tracks in database: ${allTracks.length}`,
+    );
+  } catch (error) {
+    console.error("Error during database testing:", error);
+  }
+}
+
+app.listen(PORT, async () => {
+  console.log(`SongQuiz backend is successfully running on port: ${PORT}`);
+  console.log("All required API keys successfully loaded from .env file.");
+
+  await testDatabaseConnection();
 });
