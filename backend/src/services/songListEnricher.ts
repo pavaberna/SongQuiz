@@ -1,13 +1,12 @@
 import { readCurrentSongList, saveCurrentSongListFile } from "./songListStore";
 import { findYoutubeVideoForSong } from "./youtubeService";
-import {
-  MIN_PLAYABLE_DURATION_SECONDS,
-  MAX_PLAYABLE_DURATION_SECONDS,
-} from "../config/songRules";
 import type { CurrentSongListFile } from "../types/song";
+import { findCachedTrackBySong, saveTrackToCache } from "./trackRepository";
+import { hasPlayableYoutubeData } from "../utils/songValidation";
 
 export type EnrichOneSongResult = {
   updated: boolean;
+  source: EnrichmentSource | null;
   song: CurrentSongListFile["songs"][number] | null;
   remainingSongsWithoutYoutubeData: number;
 };
@@ -16,6 +15,8 @@ export type EnrichSongsResult = {
   totalSongs: number;
   alreadyEnriched: number;
   enriched: number;
+  cacheHits: number;
+  youtubeLookups: number;
   failed: number;
   remainingSongsWithoutYoutubeData: number;
   failures: {
@@ -33,37 +34,59 @@ export type SongListReadinessResult = {
   readyToStart: boolean;
 };
 
+type EnrichmentSource = "cache" | "youtube";
+
+async function enrichSongWithCacheOrYoutube(
+  song: CurrentSongListFile["songs"][number],
+): Promise<EnrichmentSource> {
+  const cachedTrack = await findCachedTrackBySong(song.artist, song.title);
+
+  if (cachedTrack) {
+    song.youtubeId = cachedTrack.youtubeId;
+    song.duration = cachedTrack.duration;
+    return "cache";
+  }
+
+  const youtubeData = await findYoutubeVideoForSong({
+    artist: song.artist,
+    title: song.title,
+  });
+
+  song.youtubeId = youtubeData.youtubeId;
+  song.duration = youtubeData.duration;
+
+  await saveTrackToCache(song);
+
+  return "youtube";
+}
+
 export async function enrichNextSongWithYoutubeData(): Promise<EnrichOneSongResult> {
   const songList = await readCurrentSongList();
 
   const songToUpdate = songList.songs.find(
-    (song) => !song.youtubeId || !song.duration,
+    (song) => !hasPlayableYoutubeData(song),
   );
 
   if (!songToUpdate) {
     return {
       updated: false,
+      source: null,
       song: null,
       remainingSongsWithoutYoutubeData: 0,
     };
   }
 
-  const youtubeData = await findYoutubeVideoForSong({
-    artist: songToUpdate.artist,
-    title: songToUpdate.title,
-  });
-
-  songToUpdate.youtubeId = youtubeData.youtubeId;
-  songToUpdate.duration = youtubeData.duration;
+  const source = await enrichSongWithCacheOrYoutube(songToUpdate);
 
   await saveCurrentSongListFile(songList);
 
   const remainingSongsWithoutYoutubeData = songList.songs.filter(
-    (song) => !song.youtubeId || !song.duration,
+    (song) => !hasPlayableYoutubeData(song),
   ).length;
 
   return {
     updated: true,
+    source,
     song: songToUpdate,
     remainingSongsWithoutYoutubeData,
   };
@@ -75,21 +98,28 @@ export async function enrichSongsWithYoutubeData(
   const songlist = await readCurrentSongList();
 
   let enriched = 0;
+  let cacheHits = 0;
+  let youtubeLookups = 0;
   const failures: EnrichSongsResult["failures"] = [];
 
   const songsToEnrich = songlist.songs.filter(
-    (song) => !song.youtubeId || !song.duration,
+    (song) => !hasPlayableYoutubeData(song),
   );
 
   for (const song of songsToEnrich.slice(0, limit)) {
     try {
-      const youtubeData = await findYoutubeVideoForSong({
-        artist: song.artist,
-        title: song.title,
-      });
-      song.youtubeId = youtubeData.youtubeId;
-      song.duration = youtubeData.duration;
+      const source = await enrichSongWithCacheOrYoutube(song);
+
+      if (source === "cache") {
+        cacheHits++;
+      }
+
+      if (source === "youtube") {
+        youtubeLookups++;
+      }
+
       enriched++;
+
       await saveCurrentSongListFile(songlist);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -102,13 +132,15 @@ export async function enrichSongsWithYoutubeData(
   }
 
   const remainingSongsWithoutYoutubeData = songlist.songs.filter(
-    (song) => !song.youtubeId || !song.duration,
+    (song) => !hasPlayableYoutubeData(song),
   ).length;
 
   return {
     totalSongs: songlist.songs.length,
     alreadyEnriched: songlist.songs.length - songsToEnrich.length,
     enriched,
+    cacheHits,
+    youtubeLookups,
     failed: failures.length,
     remainingSongsWithoutYoutubeData,
     failures,
@@ -124,11 +156,7 @@ export async function getSongListReadiness(): Promise<SongListReadinessResult> {
     songlist.generatedSongCount ?? songlist.songs.length;
 
   const playableSongCount = songlist.songs.filter(
-    (song) =>
-      song.youtubeId &&
-      song.duration &&
-      song.duration >= MIN_PLAYABLE_DURATION_SECONDS &&
-      song.duration <= MAX_PLAYABLE_DURATION_SECONDS,
+    hasPlayableYoutubeData,
   ).length;
 
   const missingPlayableSongCount = Math.max(

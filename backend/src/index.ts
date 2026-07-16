@@ -1,9 +1,6 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
 import { generateSongList } from "./services/geminiMusicCurator";
 import {
   readCurrentSongList,
@@ -15,20 +12,14 @@ import {
   enrichSongsWithYoutubeData,
   getSongListReadiness,
 } from "./services/songListEnricher";
+import { prisma } from "./lib/prisma";
+import { saveCurrentSongsToCache } from "./services/trackCacheService";
+import { countCachedTracks } from "./services/trackRepository";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is missing.");
-}
-
-const pool = new Pool({ connectionString: databaseUrl });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
 
 app.use(cors());
 app.use(express.json());
@@ -134,6 +125,24 @@ app.get("/api/dev/song-list-readiness", async (req, res) => {
     const songListReadiness = await getSongListReadiness();
 
     res.json(songListReadiness);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/save-current-songs-to-cache", async (req, res) => {
+  try {
+    const beforeCount = await countCachedTracks();
+    const result = await saveCurrentSongsToCache();
+    const afterCount = await countCachedTracks();
+
+    res.json({
+      beforeCount,
+      afterCount,
+      upserted: result.saved,
+      ...result,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
