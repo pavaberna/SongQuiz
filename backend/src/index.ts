@@ -9,6 +9,12 @@ import {
   readCurrentSongList,
   saveCurrentSongList,
 } from "./services/songListStore";
+import { findYoutubeVideoForSong } from "./services/youtubeService";
+import {
+  enrichNextSongWithYoutubeData,
+  enrichSongsWithYoutubeData,
+  getSongListReadiness,
+} from "./services/songListEnricher";
 
 dotenv.config();
 
@@ -71,6 +77,66 @@ app.get("/api/dev/current-songs", async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(404).json({ error: message });
+  }
+});
+
+app.post("/api/dev/youtube-song", async (req, res) => {
+  try {
+    const artist =
+      typeof req.body.artist === "string" ? req.body.artist.trim() : "";
+    const title =
+      typeof req.body.title === "string" ? req.body.title.trim() : "";
+
+    if (!artist || !title) {
+      res.status(400).json({ error: "artist and title are required" });
+      return;
+    }
+
+    const video = await findYoutubeVideoForSong({ artist, title });
+
+    res.json(video);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/enrich-next-song", async (req, res) => {
+  try {
+    const result = await enrichNextSongWithYoutubeData();
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/enrich-songs", async (req, res) => {
+  try {
+    const limit = Number(req.body.limit ?? 3);
+
+    if (!Number.isInteger(limit) || limit < 1 || limit > 10) {
+      res
+        .status(400)
+        .json({ error: "limit must be an integer between 1 and 10" });
+      return;
+    }
+    const result = await enrichSongsWithYoutubeData(limit);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/dev/song-list-readiness", async (req, res) => {
+  try {
+    const songListReadiness = await getSongListReadiness();
+
+    res.json(songListReadiness);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
   }
 });
 

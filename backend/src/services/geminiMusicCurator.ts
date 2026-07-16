@@ -1,17 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
-
-export type GenerateSongListParams = {
-  players: number;
-  decade: string;
-  genre: string;
-};
-
-export type GeneratedSong = {
-  artist: string;
-  title: string;
-  year: number;
-  genres: string[];
-};
+import {
+  SONG_GENERATION_BUFFER_MULTIPLIER,
+  SONGS_PER_PLAYER,
+} from "../config/songRules";
+import type { GeneratedSong, GenerateSongListParams } from "../types/song";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
@@ -28,14 +20,17 @@ export async function generateSongList(
     throw new Error("Invalid number of players.");
   }
 
-  const requiredCount = params.players * 10; // 10 song per player
+  const targetSongCount = params.players * SONGS_PER_PLAYER;
+  const generatedSongCount = Math.ceil(
+    targetSongCount * SONG_GENERATION_BUFFER_MULTIPLIER,
+  );
 
   const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
 You are an expert music curator for a song quiz app played specifically by Hungarian users.
 
-Create exactly ${requiredCount} real, existing songs matching this setup:
+Create exactly ${generatedSongCount} real, existing songs matching this setup:
 - Decade: ${params.decade}
 - Genre: ${params.genre}
 
@@ -63,7 +58,7 @@ Selection & Cultural Relevance Rules (CRITICAL for Hungarian players):
    - Every international song must be culturally recognizable to an average Hungarian music listener.
 
 General Rules:
-- Return exactly ${requiredCount} items.
+- Return exactly ${generatedSongCount} items.
 - Do not include duplicate songs.
 - Use real, existing songs only.
 - The year must match the requested decade.
@@ -71,7 +66,7 @@ General Rules:
 `;
 
   console.log(
-    `Generating ${requiredCount} songs with ${GEMINI_MODEL}...`,
+    `Generating ${generatedSongCount} songs for ${targetSongCount} required playable songs with ${GEMINI_MODEL}...`,
   );
 
   const response = await ai.models.generateContent({
@@ -97,9 +92,9 @@ General Rules:
     throw new Error("Gemini response is not a JSON array");
   }
 
-  if (parsed.length !== requiredCount) {
+  if (parsed.length !== generatedSongCount) {
     throw new Error(
-      `Expected ${requiredCount} songs, but got ${parsed.length}`,
+      `Expected ${generatedSongCount} songs, but got ${parsed.length}`,
     );
   }
 

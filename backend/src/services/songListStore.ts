@@ -1,20 +1,11 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import type {
+  CurrentSongListFile,
   GeneratedSong,
   GenerateSongListParams,
-} from "./geminiMusicCurator";
-
-export type StoredSong = GeneratedSong & {
-  youtubeId: string | null;
-  duration: number | null;
-};
-
-export type CurrentSongListFile = {
-  generatedAt: string;
-  request: GenerateSongListParams;
-  songs: StoredSong[];
-};
+} from "../types/song";
+import { SONGS_PER_PLAYER } from "../config/songRules";
 
 const runtimeDir = path.join(process.cwd(), "runtime");
 const currentSongListPath = path.join(runtimeDir, "current-song-list.json");
@@ -27,6 +18,8 @@ export async function saveCurrentSongList(
 
   const fileContent: CurrentSongListFile = {
     generatedAt: new Date().toISOString(),
+    targetSongCount: request.players * SONGS_PER_PLAYER,
+    generatedSongCount: songs.length,
     request,
     songs: songs.map((song) => ({
       ...song,
@@ -47,4 +40,16 @@ export async function saveCurrentSongList(
 export async function readCurrentSongList(): Promise<CurrentSongListFile> {
   const fileContent = await readFile(currentSongListPath, "utf-8");
   return JSON.parse(fileContent) as CurrentSongListFile;
+}
+export async function saveCurrentSongListFile(
+  fileContent: CurrentSongListFile,
+): Promise<CurrentSongListFile> {
+  await mkdir(runtimeDir, { recursive: true });
+
+  await writeFile(
+    currentSongListPath,
+    JSON.stringify(fileContent, null, 2),
+    "utf-8",
+  );
+  return fileContent;
 }
