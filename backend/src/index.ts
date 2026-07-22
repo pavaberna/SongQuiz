@@ -15,6 +15,16 @@ import {
 import { prisma } from "./lib/prisma";
 import { saveCurrentSongsToCache } from "./services/trackCacheService";
 import { countCachedTracks } from "./services/trackRepository";
+import {
+  createGameSessionFromCurrentSongList,
+  prepareGameSession,
+  startNextRound,
+  pauseGame,
+  resumeGame,
+  finishGame,
+  endGame,
+} from "./services/gameSessionService";
+import { readCurrentGameSession } from "./services/gameSessionStore";
 
 dotenv.config();
 
@@ -143,6 +153,99 @@ app.post("/api/dev/save-current-songs-to-cache", async (req, res) => {
       upserted: result.saved,
       ...result,
     });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/create-game-session", async (req, res) => {
+  try {
+    const createdGame = await createGameSessionFromCurrentSongList();
+    res.json(createdGame);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/prepare-game-session", async (req, res) => {
+  try {
+    const enrichmentLimit = Number(req.body.enrichmentLimit ?? 10);
+
+    if (
+      !Number.isInteger(enrichmentLimit) ||
+      enrichmentLimit < 1 ||
+      enrichmentLimit > 10
+    ) {
+      res.status(400).json({
+        error: "enrichmentLimit must be an integer between 1 and 10.",
+      });
+      return;
+    }
+    const result = await prepareGameSession(enrichmentLimit);
+
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/start-round", async (req, res) => {
+  try {
+    const startGame = await startNextRound();
+    res.json(startGame);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/dev/current-game-session", async (req, res) => {
+  try {
+    const session = await readCurrentGameSession();
+    res.json(session);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/pause-game", async (req, res) => {
+  try {
+    const session = await pauseGame();
+    res.json(session);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/resume-game", async (req, res) => {
+  try {
+    const session = await resumeGame();
+    res.json(session);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/finish-game", async (req, res) => {
+  try {
+    const session = await finishGame();
+    res.json(session);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/end-game", async (req, res) => {
+  try {
+    const session = await endGame();
+    res.json(session);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
