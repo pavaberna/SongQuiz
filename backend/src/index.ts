@@ -23,6 +23,7 @@ import {
   resumeGame,
   finishGame,
   endGame,
+  submitAnswer,
 } from "./services/gameSessionService";
 import { readCurrentGameSession } from "./services/gameSessionStore";
 
@@ -245,6 +246,24 @@ app.post("/api/dev/finish-game", async (req, res) => {
 app.post("/api/dev/end-game", async (req, res) => {
   try {
     const session = await endGame();
+    res.json(session);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/submit-answer", async (req, res) => {
+  try {
+    const answer =
+      typeof req.body.answer === "string" ? req.body.answer.trim() : "";
+
+    if (!answer) {
+      res.status(400).json({ error: "answer is required" });
+      return;
+    }
+    const session = await submitAnswer(answer);
+
     res.json(session);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

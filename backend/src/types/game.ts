@@ -1,4 +1,5 @@
 import type { StoredSong } from "./song";
+import type { JudgeSongAnswerResult } from "./answer";
 
 export type GamePlayer = {
   id: number;
@@ -22,6 +23,8 @@ export type GameSession = {
   songs: GameSong[];
   roundNumber: number;
   currentRound: GameRound | null;
+  rounds: GameRound[];
+  events: GameEvent[];
 };
 
 export type GameRoundStatus = "playing" | "answering" | "scoring" | "completed";
@@ -34,4 +37,21 @@ export type GameRound = {
   clipDuration: number;
   startedAt: string;
   status: GameRoundStatus;
+  playerAnswer?: string;
+  pointsAwarded?: number;
+  judgeResult?: JudgeSongAnswerResult;
+  completedAt?: string;
+};
+
+export type GameEvent = {
+  id: string;
+  createdAt: string;
+  type:
+    | "game_created"
+    | "round_started"
+    | "answer_submitted"
+    | "game_paused"
+    | "game_resumed"
+    | "game_finished";
+  message: string;
 };

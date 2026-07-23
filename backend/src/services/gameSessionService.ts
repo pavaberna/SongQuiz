@@ -3,6 +3,7 @@ import type {
   GameSong,
   GameSession,
   GameRound,
+  GameEvent,
 } from "../types/game";
 import { readCurrentSongList } from "./songListStore";
 import { hasPlayableYoutubeData } from "../utils/songValidation";
@@ -26,6 +27,7 @@ import {
   LONG_VIDEO_THRESHOLD_SECONDS,
   LONG_VIDEO_MIN_START_OFFSET_SECONDS,
 } from "../config/songRules";
+import { calculateAnswerPoints, judgeSongAnswer } from "./answerJudgeService";
 
 export type PrepareGameSessionResult =
   | {
@@ -41,6 +43,21 @@ export type PrepareGameSessionResult =
     };
 
 type EndGameResult = { deleted: boolean };
+type SubmitAnswerResult = {
+  session: GameSession;
+  playerId: number;
+  pointsAwarded: number;
+  judgeResult: {
+    artistCorrect: boolean;
+    titleCorrect: boolean;
+    perfectMatch: boolean;
+    reason: string;
+  };
+  correctAnswer: {
+    artist: string;
+    title: string;
+  };
+};
 
 export function createPlayers(playersCount: number): GamePlayer[] {
   const players: GamePlayer[] = [];
@@ -79,7 +96,11 @@ export async function createGameSessionFromCurrentSongList(): Promise<GameSessio
     songs: selectGameSongs(currentSongList),
     roundNumber: 0,
     currentRound: null,
+    rounds: [],
+    events: [],
   };
+
+  addGameEvent(session, "game_created", "Game session created");
 
   await saveCurrentGameSession(session);
 
@@ -147,6 +168,17 @@ export async function startNextRound(): Promise<GameSession> {
       "Cannot start next round because the game is already finished.",
     );
   }
+
+  if (session.status === "paused") {
+    throw new Error("Cannot start next round while the game is paused.");
+  }
+
+  if (session.currentRound && session.currentRound.status !== "completed") {
+    throw new Error(
+      "Cannot start next round before completing the current round.",
+    );
+  }
+
   const currentSong = session.songs.find((song) => !song.played);
   if (!currentSong) {
     session.status = "finished";
@@ -192,58 +224,150 @@ export async function startNextRound(): Promise<GameSession> {
   session.currentPlayerIndex =
     (session.currentPlayerIndex + 1) % session.players.length;
 
+  addGameEvent(
+    session,
+    "round_started",
+    `Round ${nextRoundNumber} started for Player ${currentPlayer.id}.`,
+  );
   await saveCurrentGameSession(session);
 
   return session;
 }
 
 export async function pauseGame(): Promise<GameSession> {
-  const currentSession = await readCurrentGameSession();
+  const session = await readCurrentGameSession();
 
-  if (currentSession.status === "finished") {
+  if (session.status === "finished") {
     throw new Error("This game is already finished");
   }
-  currentSession.status = "paused";
-  await saveCurrentGameSession(currentSession);
+  session.status = "paused";
 
-  return currentSession;
+  addGameEvent(session, "game_paused", "Game paused.");
+
+  await saveCurrentGameSession(session);
+
+  return session;
 }
 
 export async function resumeGame(): Promise<GameSession> {
-  const currentSession = await readCurrentGameSession();
+  const session = await readCurrentGameSession();
 
-  if (currentSession.status === "finished") {
+  if (session.status === "finished") {
     throw new Error("This game is already finished");
   }
 
-  if (currentSession.status !== "paused") {
+  if (session.status !== "paused") {
     throw new Error("Only paused game can be resumed");
   }
 
-  currentSession.status = "in_progress";
+  session.status = "in_progress";
+  addGameEvent(session, "game_resumed", "Game resumed.");
 
-  await saveCurrentGameSession(currentSession);
+  await saveCurrentGameSession(session);
 
-  return currentSession;
+  return session;
 }
 
 export async function finishGame(): Promise<GameSession> {
-  const currentSession = await readCurrentGameSession();
+  const session = await readCurrentGameSession();
 
-  if (currentSession.status === "finished") {
-    return currentSession;
+  if (session.status === "finished") {
+    return session;
   }
-  currentSession.status = "finished";
-  if (currentSession.currentRound) {
-    currentSession.currentRound.status = "completed";
+  session.status = "finished";
+  if (session.currentRound) {
+    session.currentRound.status = "completed";
   }
-
-  await saveCurrentGameSession(currentSession);
-  return currentSession;
+  addGameEvent(session, "game_finished", "Game finished.");
+  await saveCurrentGameSession(session);
+  return session;
 }
 
 export async function endGame(): Promise<EndGameResult> {
   await deleteCurrentGameSession();
 
   return { deleted: true };
+}
+
+export async function submitAnswer(
+  answer: string,
+): Promise<SubmitAnswerResult> {
+  const session = await readCurrentGameSession();
+
+  if (!session.currentRound) {
+    throw new Error("There is no active round.");
+  }
+
+  const currentRound = session.currentRound;
+
+  if (session.status === "finished") {
+    throw new Error("This game is already finished.");
+  }
+
+  if (currentRound.status === "completed") {
+    throw new Error("This round is already completed.");
+  }
+
+  const judgeResult = await judgeSongAnswer({
+    playerAnswer: answer,
+    correctArtist: currentRound.currentSong.artist,
+    correctTitle: currentRound.currentSong.title,
+  });
+
+  const points = calculateAnswerPoints({
+    artistCorrect: judgeResult.artistCorrect,
+    titleCorrect: judgeResult.titleCorrect,
+    perfectMatch: judgeResult.perfectMatch,
+    reason: judgeResult.reason,
+  });
+
+  const player = session.players.find(
+    (player) => player.id === currentRound.currentPlayer.id,
+  );
+
+  if (!player) {
+    throw new Error("Current player was not found in session.");
+  }
+
+  player.score += points;
+  currentRound.currentPlayer.score = player.score;
+  currentRound.playerAnswer = answer;
+  currentRound.pointsAwarded = points;
+  currentRound.judgeResult = judgeResult;
+  currentRound.completedAt = new Date().toISOString();
+  currentRound.status = "completed";
+
+  session.rounds.push({ ...currentRound });
+
+  addGameEvent(
+    session,
+    "answer_submitted",
+    `Player ${player.id} answered and earned ${points} points.`,
+  );
+  await saveCurrentGameSession(session);
+
+  return {
+    session,
+    playerId: player.id,
+    pointsAwarded: points,
+    judgeResult,
+    correctAnswer: {
+      artist: currentRound.currentSong.artist,
+      title: currentRound.currentSong.title,
+    },
+  };
+}
+
+function addGameEvent(
+  session: GameSession,
+  type: GameEvent["type"],
+  message: string,
+) {
+  const event = {
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    type,
+    message,
+  };
+  session.events.push(event);
 }
