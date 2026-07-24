@@ -1,5 +1,9 @@
 import type { StoredSong } from "./song";
 import type { JudgeSongAnswerResult } from "./answer";
+import {
+  EnrichSongsResult,
+  SongListReadinessResult,
+} from "../services/songListEnricher";
 
 export type GamePlayer = {
   id: number;
@@ -54,4 +58,35 @@ export type GameEvent = {
     | "game_resumed"
     | "game_finished";
   message: string;
+};
+
+export type PrepareGameSessionResult =
+  | {
+      ready: true;
+      session: GameSession;
+      readiness: SongListReadinessResult;
+    }
+  | {
+      ready: false;
+      session: null;
+      readiness: SongListReadinessResult;
+      enrichment: EnrichSongsResult;
+    };
+
+export type EndGameResult = { deleted: boolean };
+
+export type GameSummary = {
+  status: GameSessionStatus;
+  players: GamePlayer[];
+  winnerIds: number[];
+  roundsPlayed: number;
+  totalRounds: number;
+  events: GameEvent[];
+};
+
+export type GameCommand = "pause" | "resume" | "finish" | "end";
+
+export type HandleGameCommandResult = {
+  command: GameCommand;
+  result: GameSession | EndGameResult;
 };

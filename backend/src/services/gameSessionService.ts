@@ -4,6 +4,11 @@ import type {
   GameSession,
   GameRound,
   GameEvent,
+  EndGameResult,
+  GameSummary,
+  PrepareGameSessionResult,
+  GameCommand,
+  HandleGameCommandResult,
 } from "../types/game";
 import { readCurrentSongList } from "./songListStore";
 import { hasPlayableYoutubeData } from "../utils/songValidation";
@@ -14,10 +19,6 @@ import {
   deleteCurrentGameSession,
 } from "./gameSessionStore";
 import { randomUUID } from "node:crypto";
-import type {
-  EnrichSongsResult,
-  SongListReadinessResult,
-} from "./songListEnricher";
 import {
   enrichSongsWithYoutubeData,
   getSongListReadiness,
@@ -28,36 +29,7 @@ import {
   LONG_VIDEO_MIN_START_OFFSET_SECONDS,
 } from "../config/songRules";
 import { calculateAnswerPoints, judgeSongAnswer } from "./answerJudgeService";
-
-export type PrepareGameSessionResult =
-  | {
-      ready: true;
-      session: GameSession;
-      readiness: SongListReadinessResult;
-    }
-  | {
-      ready: false;
-      session: null;
-      readiness: SongListReadinessResult;
-      enrichment: EnrichSongsResult;
-    };
-
-type EndGameResult = { deleted: boolean };
-type SubmitAnswerResult = {
-  session: GameSession;
-  playerId: number;
-  pointsAwarded: number;
-  judgeResult: {
-    artistCorrect: boolean;
-    titleCorrect: boolean;
-    perfectMatch: boolean;
-    reason: string;
-  };
-  correctAnswer: {
-    artist: string;
-    title: string;
-  };
-};
+import { SubmitAnswerResult } from "../types/answer";
 
 export function createPlayers(playersCount: number): GamePlayer[] {
   const players: GamePlayer[] = [];
@@ -66,21 +38,6 @@ export function createPlayers(playersCount: number): GamePlayer[] {
     players.push({ id: index, score: 0 });
   }
   return players;
-}
-
-function selectGameSongs(currentSongList: CurrentSongListFile): GameSong[] {
-  const playableSongs = currentSongList.songs.filter(hasPlayableYoutubeData);
-  if (playableSongs.length < currentSongList.targetSongCount) {
-    throw new Error(
-      `Not enough playable songs. Required: ${currentSongList.targetSongCount}, available: ${playableSongs.length}.`,
-    );
-  }
-  const selectedSongs = playableSongs.slice(0, currentSongList.targetSongCount);
-  const gameSongs: GameSong[] = selectedSongs.map((song) => ({
-    ...song,
-    played: false,
-  }));
-  return gameSongs;
 }
 
 export async function createGameSessionFromCurrentSongList(): Promise<GameSession> {
@@ -142,25 +99,6 @@ export async function prepareGameSession(
   };
 }
 
-function calculateStartOffset(durationSeconds: number): number {
-  const minStartOffset =
-    durationSeconds > LONG_VIDEO_THRESHOLD_SECONDS
-      ? LONG_VIDEO_MIN_START_OFFSET_SECONDS
-      : 0;
-
-  const maxStartOffset = durationSeconds - CLIP_DURATION_SECONDS;
-
-  if (maxStartOffset < minStartOffset) {
-    throw new Error(
-      `Cannot calculate start offset for duration ${durationSeconds}.`,
-    );
-  }
-
-  return Math.floor(
-    minStartOffset + Math.random() * (maxStartOffset - minStartOffset + 1),
-  );
-}
-
 export async function startNextRound(): Promise<GameSession> {
   const session = await readCurrentGameSession();
   if (session.status === "finished") {
@@ -183,6 +121,12 @@ export async function startNextRound(): Promise<GameSession> {
   if (!currentSong) {
     session.status = "finished";
     session.currentRound = null;
+
+    addGameEvent(
+      session,
+      "game_finished",
+      "Game finished because there are no songs left.",
+    );
 
     await saveCurrentGameSession(session);
     return session;
@@ -216,6 +160,10 @@ export async function startNextRound(): Promise<GameSession> {
     status: "playing",
   };
 
+  if (!session.rounds) {
+    session.rounds = [];
+  }
+
   currentSong.played = true;
 
   session.roundNumber = nextRoundNumber;
@@ -240,6 +188,11 @@ export async function pauseGame(): Promise<GameSession> {
   if (session.status === "finished") {
     throw new Error("This game is already finished");
   }
+
+  if (session.status === "paused") {
+    return session;
+  }
+
   session.status = "paused";
 
   addGameEvent(session, "game_paused", "Game paused.");
@@ -337,6 +290,10 @@ export async function submitAnswer(
   currentRound.completedAt = new Date().toISOString();
   currentRound.status = "completed";
 
+  if (!session.rounds) {
+    session.rounds = [];
+  }
+
   session.rounds.push({ ...currentRound });
 
   addGameEvent(
@@ -358,6 +315,92 @@ export async function submitAnswer(
   };
 }
 
+export async function getGameSummary(): Promise<GameSummary> {
+  const session = await readCurrentGameSession();
+
+  const scores = session.players.map((player) => player.score);
+
+  const highestScore = Math.max(...scores);
+
+  const winnerIds = session.players
+    .filter((player) => player.score === highestScore)
+    .map((player) => player.id);
+
+  return {
+    status: session.status,
+    players: session.players,
+    winnerIds,
+    roundsPlayed: session.rounds?.length ?? 0,
+    totalRounds: session.songs.length,
+    events: session.events ?? [],
+  };
+}
+
+export async function handleGameCommand(
+  rawCommand: string,
+): Promise<HandleGameCommandResult> {
+  const command = normalizeGameCommand(rawCommand);
+
+  switch (command) {
+    case "pause": {
+      const result = await pauseGame();
+      return {
+        command,
+        result,
+      };
+    }
+    case "resume": {
+      const result = await resumeGame();
+      return {
+        command,
+        result,
+      };
+    }
+    case "finish": {
+      const result = await finishGame();
+      return {
+        command,
+        result,
+      };
+    }
+    case "end": {
+      const result = await endGame();
+      return {
+        command,
+        result,
+      };
+    }
+  }
+}
+
+export function handleWakeCommand(
+  transcript: string,
+): Promise<HandleGameCommandResult> {
+  const command = extractWakeCommand(transcript);
+  return handleGameCommand(command);
+}
+
+// HELPER FUNCTIONS
+
+function calculateStartOffset(durationSeconds: number): number {
+  const minStartOffset =
+    durationSeconds > LONG_VIDEO_THRESHOLD_SECONDS
+      ? LONG_VIDEO_MIN_START_OFFSET_SECONDS
+      : 0;
+
+  const maxStartOffset = durationSeconds - CLIP_DURATION_SECONDS;
+
+  if (maxStartOffset < minStartOffset) {
+    throw new Error(
+      `Cannot calculate start offset for duration ${durationSeconds}.`,
+    );
+  }
+
+  return Math.floor(
+    minStartOffset + Math.random() * (maxStartOffset - minStartOffset + 1),
+  );
+}
+
 function addGameEvent(
   session: GameSession,
   type: GameEvent["type"],
@@ -369,5 +412,82 @@ function addGameEvent(
     type,
     message,
   };
+
+  if (!session.events) {
+    session.events = [];
+  }
   session.events.push(event);
+}
+
+function normalizeGameCommand(rawCommand: string): GameCommand {
+  const command = rawCommand.trim().toLowerCase();
+
+  if (
+    command === "pause" ||
+    command === "stop" ||
+    command === "szünet" ||
+    command === "állj" ||
+    command === "megáll"
+  ) {
+    return "pause";
+  }
+
+  if (
+    command === "resume" ||
+    command === "continue" ||
+    command === "folytatás" ||
+    command === "folytasd" ||
+    command === "mehet"
+  ) {
+    return "resume";
+  }
+
+  if (command === "finish") {
+    return "finish";
+  }
+
+  if (
+    command === "end" ||
+    command === "end game" ||
+    command === "quit" ||
+    command === "kilépés" ||
+    command === "játék vége" ||
+    command === "befejezés"
+  ) {
+    return "end";
+  }
+
+  throw new Error(`Unknown game command: ${rawCommand}`);
+}
+
+function extractWakeCommand(transcript: string): string {
+  const wakeWord = "arise";
+  const normalizedTranscript = transcript.trim().toLowerCase();
+
+  if (!normalizedTranscript.startsWith(wakeWord)) {
+    throw new Error("Wake word was not detected.");
+  }
+
+  const command = normalizedTranscript.slice(wakeWord.length).trim();
+
+  if (!command) {
+    throw new Error("Command is missing after wake word.");
+  }
+
+  return command;
+}
+
+function selectGameSongs(currentSongList: CurrentSongListFile): GameSong[] {
+  const playableSongs = currentSongList.songs.filter(hasPlayableYoutubeData);
+  if (playableSongs.length < currentSongList.targetSongCount) {
+    throw new Error(
+      `Not enough playable songs. Required: ${currentSongList.targetSongCount}, available: ${playableSongs.length}.`,
+    );
+  }
+  const selectedSongs = playableSongs.slice(0, currentSongList.targetSongCount);
+  const gameSongs: GameSong[] = selectedSongs.map((song) => ({
+    ...song,
+    played: false,
+  }));
+  return gameSongs;
 }

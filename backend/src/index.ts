@@ -24,6 +24,9 @@ import {
   finishGame,
   endGame,
   submitAnswer,
+  getGameSummary,
+  handleGameCommand,
+  handleWakeCommand,
 } from "./services/gameSessionService";
 import { readCurrentGameSession } from "./services/gameSessionStore";
 
@@ -265,6 +268,55 @@ app.post("/api/dev/submit-answer", async (req, res) => {
     const session = await submitAnswer(answer);
 
     res.json(session);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/dev/game-summary", async (req, res) => {
+  try {
+    const summary = await getGameSummary();
+
+    res.json(summary);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/game-command", async (req, res) => {
+  try {
+    const command =
+      typeof req.body.command === "string" ? req.body.command.trim() : "";
+
+    if (command === "") {
+      res.status(400).json({ error: "command is required" });
+      return;
+    }
+
+    const result = await handleGameCommand(command);
+
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/wake-command", async (req, res) => {
+  try {
+    const transcript =
+      typeof req.body.transcript === "string" ? req.body.transcript.trim() : "";
+
+    if (transcript === "") {
+      res.status(400).json({ error: "transcript is required" });
+      return;
+    }
+
+    const result = await handleWakeCommand(transcript);
+
+    res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
