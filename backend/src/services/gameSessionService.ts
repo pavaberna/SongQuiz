@@ -29,7 +29,10 @@ import {
   LONG_VIDEO_MIN_START_OFFSET_SECONDS,
 } from "../config/songRules";
 import { calculateAnswerPoints, judgeSongAnswer } from "./answerJudgeService";
-import { SubmitAnswerResult } from "../types/answer";
+import type {
+  JudgeSongAnswerResult,
+  SubmitAnswerResult,
+} from "../types/answer";
 
 export function createPlayers(playersCount: number): GamePlayer[] {
   const players: GamePlayer[] = [];
@@ -44,6 +47,7 @@ export async function createGameSessionFromCurrentSongList(): Promise<GameSessio
   const currentSongList = await readCurrentSongList();
   const session: GameSession = {
     id: randomUUID(),
+    language: currentSongList.request.language ?? "hu",
     createdAt: new Date().toISOString(),
     status: "ready",
     players: createPlayers(currentSongList.request.players),
@@ -169,8 +173,6 @@ export async function startNextRound(): Promise<GameSession> {
   session.roundNumber = nextRoundNumber;
   session.currentRound = round;
   session.status = "in_progress";
-  session.currentPlayerIndex =
-    (session.currentPlayerIndex + 1) % session.players.length;
 
   addGameEvent(
     session,
@@ -261,11 +263,22 @@ export async function submitAnswer(
     throw new Error("This round is already completed.");
   }
 
-  const judgeResult = await judgeSongAnswer({
-    playerAnswer: answer,
-    correctArtist: currentRound.currentSong.artist,
-    correctTitle: currentRound.currentSong.title,
-  });
+  let judgeResult: JudgeSongAnswerResult;
+
+  if (isPassAnswer(answer)) {
+    judgeResult = {
+      artistCorrect: false,
+      titleCorrect: false,
+      perfectMatch: false,
+      reason: "Player skipped the answer.",
+    };
+  } else {
+    judgeResult = await judgeSongAnswer({
+      playerAnswer: answer,
+      correctArtist: currentRound.currentSong.artist,
+      correctTitle: currentRound.currentSong.title,
+    });
+  }
 
   const points = calculateAnswerPoints({
     artistCorrect: judgeResult.artistCorrect,
@@ -289,6 +302,8 @@ export async function submitAnswer(
   currentRound.judgeResult = judgeResult;
   currentRound.completedAt = new Date().toISOString();
   currentRound.status = "completed";
+  session.currentPlayerIndex =
+    (session.currentPlayerIndex + 1) % session.players.length;
 
   if (!session.rounds) {
     session.rounds = [];
@@ -490,4 +505,19 @@ function selectGameSongs(currentSongList: CurrentSongListFile): GameSong[] {
     played: false,
   }));
   return gameSongs;
+}
+
+function isPassAnswer(answer: string): boolean {
+  let normalizedAnswer = answer.trim().toLowerCase();
+  const punctuationMarks = [".", ",", "!", "?"];
+
+  for (const mark of punctuationMarks) {
+    normalizedAnswer = normalizedAnswer.replaceAll(mark, "");
+  }
+
+  const words = normalizedAnswer.split(" ");
+
+  const passCommands = ["pass", "skip", "passz", "kihagyom"];
+
+  return passCommands.some((command) => words.includes(command));
 }

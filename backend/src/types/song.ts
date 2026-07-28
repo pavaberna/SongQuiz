@@ -1,7 +1,10 @@
+import { GameLanguage } from "./language";
+
 export type GenerateSongListParams = {
   players: number;
   decade: string;
   genre: string;
+  language?: GameLanguage;
 };
 
 export type GeneratedSong = {

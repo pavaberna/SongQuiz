@@ -29,6 +29,23 @@ import {
   handleWakeCommand,
 } from "./services/gameSessionService";
 import { readCurrentGameSession } from "./services/gameSessionStore";
+import multer from "multer";
+import { transcribeAudio } from "./services/speechToTextService";
+import { VoiceLineKey, voiceLineKeys } from "./services/voice/voiceTypes";
+import { GameLanguage } from "./types/language";
+import { getVoiceLine } from "./services/voice/voiceService";
+import { generateSpeech } from "./services/textToSpeechService";
+import {
+  readVoiceLineAudio,
+  saveVoiceLineAudio,
+} from "./services/voice/voiceAudioStore";
+import type { VoiceLineParams } from "./services/voice/voiceTypes";
+import type { GameVoiceInstruction } from "./types/game";
+import {
+  createAnswerVoiceInstruction,
+  createGameCommandVoiceInstruction,
+  createResumeVoiceInstruction,
+} from "./services/voice/gameVoiceService";
 
 dotenv.config();
 
@@ -37,6 +54,13 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Backend is healthy" });
@@ -49,6 +73,15 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
       typeof req.body.decade === "string" ? req.body.decade.trim() : "";
     const genre =
       typeof req.body.genre === "string" ? req.body.genre.trim() : "";
+    const rawLanguage =
+      typeof req.body.language === "string" ? req.body.language.trim() : "hu";
+
+    if (rawLanguage !== "hu" && rawLanguage !== "en") {
+      res.status(400).json({ error: "language must be 'hu' or 'en'." });
+      return;
+    }
+
+    const language = rawLanguage;
 
     if (!Number.isInteger(players) || players < 1) {
       res.status(400).json({ error: "players must be a positive integer." });
@@ -60,7 +93,7 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
       return;
     }
 
-    const request = { players, decade, genre };
+    const request = { players, decade, genre, language };
     const songs = await generateSongList(request);
     const savedSongList = await saveCurrentSongList(request, songs);
 
@@ -198,8 +231,24 @@ app.post("/api/dev/prepare-game-session", async (req, res) => {
 
 app.post("/api/dev/start-round", async (req, res) => {
   try {
-    const startGame = await startNextRound();
-    res.json(startGame);
+    const session = await startNextRound();
+
+    let voice: GameVoiceInstruction | null = null;
+
+    if (session.currentRound) {
+      voice = {
+        key:
+          session.currentRound.roundNumber === 1
+            ? "round_started"
+            : "next_player",
+        params: {
+          roundNumber: session.currentRound.roundNumber,
+          playerId: session.currentRound.currentPlayer.id,
+        },
+      };
+    }
+
+    res.json({ session, voice });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
@@ -219,7 +268,10 @@ app.get("/api/dev/current-game-session", async (req, res) => {
 app.post("/api/dev/pause-game", async (req, res) => {
   try {
     const session = await pauseGame();
-    res.json(session);
+    const voice: GameVoiceInstruction = {
+      key: "game_paused",
+    };
+    res.json({ session, voice });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
@@ -229,7 +281,10 @@ app.post("/api/dev/pause-game", async (req, res) => {
 app.post("/api/dev/resume-game", async (req, res) => {
   try {
     const session = await resumeGame();
-    res.json(session);
+
+    const voice = createResumeVoiceInstruction(session);
+
+    res.json({ session, voice });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
@@ -239,7 +294,12 @@ app.post("/api/dev/resume-game", async (req, res) => {
 app.post("/api/dev/finish-game", async (req, res) => {
   try {
     const session = await finishGame();
-    res.json(session);
+
+    const voice: GameVoiceInstruction = {
+      key: "game_stopped",
+    };
+
+    res.json({ session, voice });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
@@ -265,9 +325,12 @@ app.post("/api/dev/submit-answer", async (req, res) => {
       res.status(400).json({ error: "answer is required" });
       return;
     }
-    const session = await submitAnswer(answer);
 
-    res.json(session);
+    const result = await submitAnswer(answer);
+
+    const voice = createAnswerVoiceInstruction(result);
+
+    res.json({ result, voice });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
@@ -278,7 +341,18 @@ app.get("/api/dev/game-summary", async (req, res) => {
   try {
     const summary = await getGameSummary();
 
-    res.json(summary);
+    const voice: GameVoiceInstruction = {
+      key: "game_summary",
+      params: {
+        playerScores: summary.players.map((player) => ({
+          playerId: player.id,
+          score: player.score,
+        })),
+        winnerIds: summary.winnerIds,
+      },
+    };
+
+    res.json({ summary, voice });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
@@ -296,8 +370,9 @@ app.post("/api/dev/game-command", async (req, res) => {
     }
 
     const result = await handleGameCommand(command);
+    const voice = createGameCommandVoiceInstruction(result);
 
-    res.json(result);
+    res.json({ result, voice });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
@@ -315,8 +390,214 @@ app.post("/api/dev/wake-command", async (req, res) => {
     }
 
     const result = await handleWakeCommand(transcript);
+    const voice = createGameCommandVoiceInstruction(result);
 
-    res.json(result);
+    res.json({ result, voice });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post(
+  "/api/dev/transcribe-audio",
+  upload.single("audio"),
+  async (req, res) => {
+    try {
+      const file = req.file;
+
+      if (!file) {
+        res.status(400).json({ error: "audio file is required" });
+        return;
+      }
+
+      const text = await transcribeAudio(file);
+
+      res.json({ text });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: message });
+    }
+  },
+);
+
+app.post(
+  "/api/dev/submit-audio-answer",
+  upload.single("audio"),
+  async (req, res) => {
+    try {
+      const file = req.file;
+
+      if (!file) {
+        res.status(400).json({ error: "audio file is required" });
+        return;
+      }
+
+      const text = await transcribeAudio(file);
+      const result = await submitAnswer(text);
+
+      const voice = createAnswerVoiceInstruction(result);
+
+      res.json({ transcript: text, result, voice });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: message });
+    }
+  },
+);
+
+app.get("/api/dev/voice-line", async (req, res) => {
+  try {
+    const language = req.query.language;
+    const key = req.query.key;
+
+    if (language !== "hu" && language !== "en") {
+      res.status(400).json({ error: "language must be 'hu' or 'en'." });
+      return;
+    }
+
+    if (typeof key !== "string") {
+      res.status(400).json({ error: "key is required." });
+      return;
+    }
+
+    if (!voiceLineKeys.includes(key as VoiceLineKey)) {
+      res.status(400).json({ error: "Invalid voice line key." });
+      return;
+    }
+
+    const checkedLanguage: GameLanguage = language;
+    const checkedKey = key as VoiceLineKey;
+    const text = getVoiceLine(checkedLanguage, checkedKey);
+
+    res.json({
+      language: checkedLanguage,
+      key: checkedKey,
+      text,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/dev/voice-line-audio", async (req, res) => {
+  try {
+    const language = req.query.language;
+    const key = req.query.key;
+
+    if (language !== "hu" && language !== "en") {
+      res.status(400).json({ error: "language must be 'hu' or 'en'." });
+      return;
+    }
+
+    if (typeof key !== "string") {
+      res.status(400).json({ error: "key is required." });
+      return;
+    }
+
+    if (!voiceLineKeys.includes(key as VoiceLineKey)) {
+      res.status(400).json({ error: "Invalid voice line key." });
+      return;
+    }
+
+    const checkedLanguage: GameLanguage = language;
+    const checkedKey = key as VoiceLineKey;
+
+    const cachedAudio = await readVoiceLineAudio(checkedLanguage, checkedKey);
+
+    if (cachedAudio) {
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("X-Voice-Cache", "HIT");
+      res.send(cachedAudio);
+      return;
+    }
+
+    const text = getVoiceLine(checkedLanguage, checkedKey);
+    const speech = await generateSpeech(text);
+
+    await saveVoiceLineAudio(checkedLanguage, checkedKey, speech.audioBuffer);
+
+    res.setHeader("Content-Type", speech.contentType);
+    res.setHeader("X-Voice-Cache", "MISS");
+    res.send(speech.audioBuffer);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/voice-line-preview", async (req, res) => {
+  try {
+    const language =
+      typeof req.body.language === "string" ? req.body.language.trim() : "";
+
+    const key = typeof req.body.key === "string" ? req.body.key.trim() : "";
+
+    if (language !== "hu" && language !== "en") {
+      res.status(400).json({ error: "language must be 'hu' or 'en'." });
+      return;
+    }
+
+    const checkedLanguage: GameLanguage = language;
+
+    if (!voiceLineKeys.includes(key as VoiceLineKey)) {
+      res.status(400).json({ error: "Invalid voice line key." });
+      return;
+    }
+
+    const checkedKey = key as VoiceLineKey;
+
+    const params: VoiceLineParams =
+      req.body.params &&
+      typeof req.body.params === "object" &&
+      !Array.isArray(req.body.params)
+        ? req.body.params
+        : {};
+
+    const text = getVoiceLine(checkedLanguage, checkedKey, params);
+
+    res.json({ language: checkedLanguage, key: checkedKey, params, text });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/voice-line-audio-preview", async (req, res) => {
+  try {
+    const language =
+      typeof req.body.language === "string" ? req.body.language.trim() : "";
+
+    const key = typeof req.body.key === "string" ? req.body.key.trim() : "";
+
+    if (language !== "hu" && language !== "en") {
+      res.status(400).json({ error: "language must be 'hu' or 'en'." });
+      return;
+    }
+
+    const checkedLanguage: GameLanguage = language;
+
+    if (!voiceLineKeys.includes(key as VoiceLineKey)) {
+      res.status(400).json({ error: "Invalid voice line key." });
+      return;
+    }
+
+    const checkedKey = key as VoiceLineKey;
+
+    const params: VoiceLineParams =
+      req.body.params &&
+      typeof req.body.params === "object" &&
+      !Array.isArray(req.body.params)
+        ? req.body.params
+        : {};
+
+    const text = getVoiceLine(checkedLanguage, checkedKey, params);
+
+    const speech = await generateSpeech(text);
+
+    res.setHeader("Content-Type", speech.contentType);
+    res.send(speech.audioBuffer);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });

@@ -4,6 +4,8 @@ import {
   EnrichSongsResult,
   SongListReadinessResult,
 } from "../services/songListEnricher";
+import { GameLanguage } from "./language";
+import { VoiceLineKey, VoiceLineParams } from "../services/voice/voiceTypes";
 
 export type GamePlayer = {
   id: number;
@@ -18,6 +20,7 @@ export type GameSessionStatus = "ready" | "in_progress" | "paused" | "finished";
 
 export type GameSession = {
   id: string;
+  language: GameLanguage;
   createdAt: string;
   status: GameSessionStatus;
   players: GamePlayer[];
@@ -86,7 +89,17 @@ export type GameSummary = {
 
 export type GameCommand = "pause" | "resume" | "finish" | "end";
 
-export type HandleGameCommandResult = {
-  command: GameCommand;
-  result: GameSession | EndGameResult;
+export type HandleGameCommandResult =
+  | {
+      command: "pause" | "resume" | "finish";
+      result: GameSession;
+    }
+  | {
+      command: "end";
+      result: EndGameResult;
+    };
+
+export type GameVoiceInstruction = {
+  key: VoiceLineKey;
+  params?: VoiceLineParams;
 };
