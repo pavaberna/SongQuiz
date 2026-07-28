@@ -22,7 +22,13 @@ export async function saveCurrentGameSession(
 
 export async function readCurrentGameSession(): Promise<GameSession> {
   const fileContent = await readFile(currentGameSessionPath, "utf-8");
-  return JSON.parse(fileContent) as GameSession;
+  const session = JSON.parse(fileContent) as GameSession;
+
+  if (!session.language) {
+    session.language = "hu";
+  }
+
+  return session;
 }
 
 export async function deleteCurrentGameSession(): Promise<void> {

@@ -12,6 +12,10 @@ export type GamePlayer = {
   score: number;
 };
 
+export type GameLeaderboardEntry = GamePlayer & {
+  rank: number;
+};
+
 export type GameSong = StoredSong & {
   played: boolean;
 };
@@ -85,6 +89,7 @@ export type GameSummary = {
   roundsPlayed: number;
   totalRounds: number;
   events: GameEvent[];
+  leaderboard: GameLeaderboardEntry[];
 };
 
 export type GameCommand = "pause" | "resume" | "finish" | "end";
@@ -103,3 +108,18 @@ export type GameVoiceInstruction = {
   key: VoiceLineKey;
   params?: VoiceLineParams;
 };
+
+export type ReplayGameSetup = {
+  players: number;
+  language: GameLanguage;
+};
+
+export type ReplayDecisionResult =
+  | {
+      decision: "replay";
+      setup: ReplayGameSetup;
+    }
+  | {
+      decision: "end";
+      result: EndGameResult;
+    };

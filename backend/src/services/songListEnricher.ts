@@ -76,20 +76,27 @@ export async function enrichNextSongWithYoutubeData(): Promise<EnrichOneSongResu
     };
   }
 
-  const source = await enrichSongWithCacheOrYoutube(songToUpdate);
+  try {
+    const source = await enrichSongWithCacheOrYoutube(songToUpdate);
 
-  await saveCurrentSongListFile(songList);
+    await saveCurrentSongListFile(songList);
 
-  const remainingSongsWithoutYoutubeData = songList.songs.filter(
-    (song) => !hasPlayableYoutubeData(song),
-  ).length;
+    const remainingSongsWithoutYoutubeData = songList.songs.filter(
+      (song) => !hasPlayableYoutubeData(song),
+    ).length;
 
-  return {
-    updated: true,
-    source,
-    song: songToUpdate,
-    remainingSongsWithoutYoutubeData,
-  };
+    return {
+      updated: true,
+      source,
+      song: songToUpdate,
+      remainingSongsWithoutYoutubeData,
+    };
+  } catch (error) {
+    moveSongToEnd(songList, songToUpdate);
+    await saveCurrentSongListFile(songList);
+
+    throw error;
+  }
 }
 
 export async function enrichSongsWithYoutubeData(
@@ -128,6 +135,9 @@ export async function enrichSongsWithYoutubeData(
         title: song.title,
         error: message,
       });
+
+      moveSongToEnd(songlist, song);
+      await saveCurrentSongListFile(songlist);
     }
   }
 
@@ -171,4 +181,21 @@ export async function getSongListReadiness(): Promise<SongListReadinessResult> {
     missingPlayableSongCount,
     readyToStart: playableSongCount >= targetSongCount,
   };
+}
+
+function moveSongToEnd(
+  songList: CurrentSongListFile,
+  song: CurrentSongListFile["songs"][number],
+): void {
+  const songIndex = songList.songs.indexOf(song);
+
+  if (songIndex === -1) {
+    return;
+  }
+
+  const [failedSong] = songList.songs.splice(songIndex, 1);
+
+  if (failedSong) {
+    songList.songs.push(failedSong);
+  }
 }

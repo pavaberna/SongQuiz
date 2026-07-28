@@ -1,6 +1,6 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import { generateSongList } from "./services/geminiMusicCurator";
 import {
   readCurrentSongList,
@@ -12,7 +12,6 @@ import {
   enrichSongsWithYoutubeData,
   getSongListReadiness,
 } from "./services/songListEnricher";
-import { prisma } from "./lib/prisma";
 import { saveCurrentSongsToCache } from "./services/trackCacheService";
 import { countCachedTracks } from "./services/trackRepository";
 import {
@@ -27,13 +26,19 @@ import {
   getGameSummary,
   handleGameCommand,
   handleWakeCommand,
+  prepareReplay,
+  handleReplayDecision,
 } from "./services/gameSessionService";
 import { readCurrentGameSession } from "./services/gameSessionStore";
 import multer from "multer";
 import { transcribeAudio } from "./services/speechToTextService";
 import { VoiceLineKey, voiceLineKeys } from "./services/voice/voiceTypes";
 import { GameLanguage } from "./types/language";
-import { getVoiceLine } from "./services/voice/voiceService";
+import {
+  getVoiceLine,
+  getMissingVoiceLineParams,
+  voiceLineRequiresParams,
+} from "./services/voice/voiceService";
 import { generateSpeech } from "./services/textToSpeechService";
 import {
   readVoiceLineAudio,
@@ -46,8 +51,6 @@ import {
   createGameCommandVoiceInstruction,
   createResumeVoiceInstruction,
 } from "./services/voice/gameVoiceService";
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -344,7 +347,7 @@ app.get("/api/dev/game-summary", async (req, res) => {
     const voice: GameVoiceInstruction = {
       key: "game_summary",
       params: {
-        playerScores: summary.players.map((player) => ({
+        playerScores: summary.leaderboard.map((player) => ({
           playerId: player.id,
           score: player.score,
         })),
@@ -468,6 +471,14 @@ app.get("/api/dev/voice-line", async (req, res) => {
 
     const checkedLanguage: GameLanguage = language;
     const checkedKey = key as VoiceLineKey;
+
+    if (voiceLineRequiresParams(checkedKey)) {
+      res.status(400).json({
+        error: "This voice line requires params. Use the POST endpoint.",
+      });
+      return;
+    }
+
     const text = getVoiceLine(checkedLanguage, checkedKey);
 
     res.json({
@@ -503,6 +514,13 @@ app.get("/api/dev/voice-line-audio", async (req, res) => {
 
     const checkedLanguage: GameLanguage = language;
     const checkedKey = key as VoiceLineKey;
+
+    if (voiceLineRequiresParams(checkedKey)) {
+      res.status(400).json({
+        error: "This voice line requires params. Use the POST endpoint.",
+      });
+      return;
+    }
 
     const cachedAudio = await readVoiceLineAudio(checkedLanguage, checkedKey);
 
@@ -555,6 +573,16 @@ app.post("/api/dev/voice-line-preview", async (req, res) => {
         ? req.body.params
         : {};
 
+    const missingParams = getMissingVoiceLineParams(checkedKey, params);
+
+    if (missingParams.length > 0) {
+      res.status(400).json({
+        error: "Required voice line parameters are missing.",
+        missingParams,
+      });
+      return;
+    }
+
     const text = getVoiceLine(checkedLanguage, checkedKey, params);
 
     res.json({ language: checkedLanguage, key: checkedKey, params, text });
@@ -592,6 +620,16 @@ app.post("/api/dev/voice-line-audio-preview", async (req, res) => {
         ? req.body.params
         : {};
 
+    const missingParams = getMissingVoiceLineParams(checkedKey, params);
+
+    if (missingParams.length > 0) {
+      res.status(400).json({
+        error: "Required voice line parameters are missing.",
+        missingParams,
+      });
+      return;
+    }
+
     const text = getVoiceLine(checkedLanguage, checkedKey, params);
 
     const speech = await generateSpeech(text);
@@ -604,37 +642,44 @@ app.post("/api/dev/voice-line-audio-preview", async (req, res) => {
   }
 });
 
-async function testDatabaseConnection() {
+app.post("/api/dev/play-again", async (req, res) => {
   try {
-    console.log("Connecting to the database and saving test record...");
+    const setup = await prepareReplay();
 
-    const testTrack = await prisma.track.upsert({
-      where: { youtubeId: "dQw4w9WgXcQ" },
-      update: {},
-      create: {
-        youtubeId: "dQw4w9WgXcQ",
-        title: "Never Gonna Give You Up",
-        artist: "Rick Astley",
-        year: 1987,
-        duration: 212,
-        genres: ["Pop"],
-      },
-    });
+    const voice: GameVoiceInstruction = {
+      key: "restart_ask_decade",
+    };
 
-    console.log("Successfully saved or verified track:", testTrack.title);
-
-    const allTracks = await prisma.track.findMany();
-    console.log(
-      `Database read successful. Total tracks in database: ${allTracks.length}`,
-    );
+    res.json({ setup, voice });
   } catch (error) {
-    console.error("Error during database testing:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
   }
-}
+});
 
-app.listen(PORT, async () => {
+app.post("/api/dev/replay-decision", async (req, res) => {
+  try {
+    const answer =
+      typeof req.body.answer === "string" ? req.body.answer.trim() : "";
+
+    if (!answer) {
+      res.status(400).json({ error: "answer is required" });
+      return;
+    }
+
+    const result = await handleReplayDecision(answer);
+
+    const voice: GameVoiceInstruction = {
+      key: result.decision === "replay" ? "restart_ask_decade" : "game_stopped",
+    };
+
+    res.json({ result, voice });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.listen(PORT, () => {
   console.log(`SongQuiz backend is successfully running on port: ${PORT}`);
-  console.log("All required API keys successfully loaded from .env file.");
-
-  await testDatabaseConnection();
 });

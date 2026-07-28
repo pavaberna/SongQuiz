@@ -39,6 +39,22 @@ export type VoiceLineParams = {
   playerScores?: VoiceLinePlayerScore[];
 };
 
+export const requiredVoiceLineParams: Partial<
+  Record<VoiceLineKey, (keyof VoiceLineParams)[]>
+> = {
+  round_started: ["roundNumber", "playerId"],
+  next_player: ["roundNumber", "playerId"],
+
+  answer_none_correct: ["correctArtist", "correctTitle"],
+  answer_artist_correct: ["correctTitle", "points"],
+  answer_title_correct: ["correctArtist", "points"],
+  answer_both_correct: ["correctArtist", "correctTitle", "points"],
+  answer_perfect: ["points"],
+
+  game_summary: ["playerScores", "winnerIds"],
+  game_resumed: ["roundNumber", "playerId"],
+};
+
 export type VoiceLineValue = string | ((params: VoiceLineParams) => string);
 
 export type VoiceLineCatalog = Record<VoiceLineKey, VoiceLineValue>;

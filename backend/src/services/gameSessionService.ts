@@ -9,6 +9,9 @@ import type {
   PrepareGameSessionResult,
   GameCommand,
   HandleGameCommandResult,
+  GameLeaderboardEntry,
+  ReplayGameSetup,
+  ReplayDecisionResult,
 } from "../types/game";
 import { readCurrentSongList } from "./songListStore";
 import { hasPlayableYoutubeData } from "../utils/songValidation";
@@ -316,6 +319,19 @@ export async function submitAnswer(
     "answer_submitted",
     `Player ${player.id} answered and earned ${points} points.`,
   );
+
+  const allSongsPlayed = session.songs.every((song) => song.played);
+
+  if (allSongsPlayed) {
+    session.status = "finished";
+
+    addGameEvent(
+      session,
+      "game_finished",
+      "Game finished because all songs have been played.",
+    );
+  }
+
   await saveCurrentGameSession(session);
 
   return {
@@ -341,6 +357,8 @@ export async function getGameSummary(): Promise<GameSummary> {
     .filter((player) => player.score === highestScore)
     .map((player) => player.id);
 
+  const leaderboard = createLeaderboard(session.players);
+
   return {
     status: session.status,
     players: session.players,
@@ -348,6 +366,7 @@ export async function getGameSummary(): Promise<GameSummary> {
     roundsPlayed: session.rounds?.length ?? 0,
     totalRounds: session.songs.length,
     events: session.events ?? [],
+    leaderboard,
   };
 }
 
@@ -395,6 +414,41 @@ export function handleWakeCommand(
   return handleGameCommand(command);
 }
 
+export async function prepareReplay(): Promise<ReplayGameSetup> {
+  const session = await readCurrentGameSession();
+
+  if (session.status !== "finished") {
+    throw new Error("Only a finished game can be replayed.");
+  }
+
+  return {
+    players: session.players.length,
+    language: session.language,
+  };
+}
+
+export async function handleReplayDecision(
+  rawAnswer: string,
+): Promise<ReplayDecisionResult> {
+  const words = normalizeSpokenWords(rawAnswer);
+
+  const positiveCommands = ["yes", "yeah", "igen", "persze"];
+  const negativeCommands = ["no", "nope", "nem"];
+
+  const setup = await prepareReplay();
+
+  if (positiveCommands.some((command) => words.includes(command))) {
+    return { decision: "replay", setup };
+  }
+
+  if (negativeCommands.some((command) => words.includes(command))) {
+    const result = await endGame();
+    return { decision: "end", result };
+  }
+
+  throw new Error("Unknown replay decision.");
+}
+
 // HELPER FUNCTIONS
 
 function calculateStartOffset(durationSeconds: number): number {
@@ -435,7 +489,7 @@ function addGameEvent(
 }
 
 function normalizeGameCommand(rawCommand: string): GameCommand {
-  const command = rawCommand.trim().toLowerCase();
+  const command = normalizeSpokenWords(rawCommand).join(" ");
 
   if (
     command === "pause" ||
@@ -477,13 +531,13 @@ function normalizeGameCommand(rawCommand: string): GameCommand {
 
 function extractWakeCommand(transcript: string): string {
   const wakeWord = "arise";
-  const normalizedTranscript = transcript.trim().toLowerCase();
+  const words = normalizeSpokenWords(transcript);
 
-  if (!normalizedTranscript.startsWith(wakeWord)) {
+  if (words[0] !== wakeWord) {
     throw new Error("Wake word was not detected.");
   }
 
-  const command = normalizedTranscript.slice(wakeWord.length).trim();
+  const command = words.slice(1).join(" ");
 
   if (!command) {
     throw new Error("Command is missing after wake word.");
@@ -507,17 +561,37 @@ function selectGameSongs(currentSongList: CurrentSongListFile): GameSong[] {
   return gameSongs;
 }
 
-function isPassAnswer(answer: string): boolean {
-  let normalizedAnswer = answer.trim().toLowerCase();
-  const punctuationMarks = [".", ",", "!", "?"];
-
-  for (const mark of punctuationMarks) {
-    normalizedAnswer = normalizedAnswer.replaceAll(mark, "");
-  }
-
-  const words = normalizedAnswer.split(" ");
+function isPassAnswer(rawAnswer: string): boolean {
+  const words = normalizeSpokenWords(rawAnswer);
 
   const passCommands = ["pass", "skip", "passz", "kihagyom"];
 
   return passCommands.some((command) => words.includes(command));
+}
+
+function createLeaderboard(players: GamePlayer[]): GameLeaderboardEntry[] {
+  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
+  return sortedPlayers.map((player) => {
+    const rank =
+      sortedPlayers.findIndex(
+        (sortedPlayer) => sortedPlayer.score === player.score,
+      ) + 1;
+
+    return {
+      ...player,
+      rank,
+    };
+  });
+}
+
+function normalizeSpokenWords(text: string): string[] {
+  let normalizedText = text.trim().toLowerCase();
+  const punctuationMarks = [".", ",", "!", "?"];
+
+  for (const mark of punctuationMarks) {
+    normalizedText = normalizedText.replaceAll(mark, "");
+  }
+
+  return normalizedText.split(" ").filter(Boolean);
 }
