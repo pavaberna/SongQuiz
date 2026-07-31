@@ -3,6 +3,7 @@ import { findYoutubeVideoForSong } from "./youtubeService";
 import type { CurrentSongListFile } from "../types/song";
 import { findCachedTrackBySong, saveTrackToCache } from "./trackRepository";
 import { hasPlayableYoutubeData } from "../utils/songValidation";
+import { SONGS_PER_PLAYER } from "../config/songRules";
 
 export type EnrichOneSongResult = {
   updated: boolean;
@@ -161,7 +162,7 @@ export async function getSongListReadiness(): Promise<SongListReadinessResult> {
   const songlist = await readCurrentSongList();
 
   const targetSongCount =
-    songlist.targetSongCount ?? songlist.request.players * 10;
+    songlist.targetSongCount ?? songlist.request.players * SONGS_PER_PLAYER;
   const generatedSongCount =
     songlist.generatedSongCount ?? songlist.songs.length;
 

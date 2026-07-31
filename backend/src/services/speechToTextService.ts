@@ -1,12 +1,12 @@
 import OpenAI, { toFile } from "openai";
 
-type AudioFile = {
-  buffer: Buffer;
-  originalname: string;
-  mimetype: string;
-};
+import { getTranscriptionPrompt } from "../prompts/transcriptionPrompt";
+import type { TranscriptionOptions, UploadedAudioFile } from "../types/speech";
 
-export async function transcribeAudio(file: AudioFile): Promise<string> {
+export async function transcribeAudio(
+  file: UploadedAudioFile,
+  options: TranscriptionOptions,
+): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
@@ -21,7 +21,9 @@ export async function transcribeAudio(file: AudioFile): Promise<string> {
 
   const transcription = await client.audio.transcriptions.create({
     file: audioFile,
+    language: options.language,
     model: "gpt-4o-mini-transcribe",
+    prompt: getTranscriptionPrompt(options.language, options.context),
   });
 
   return transcription.text;

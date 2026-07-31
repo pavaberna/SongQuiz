@@ -1,4 +1,4 @@
-export const SONGS_PER_PLAYER = 10;
+export const SONGS_PER_PLAYER = 5;
 export const SONG_GENERATION_BUFFER_MULTIPLIER = 1.25;
 
 export const MIN_PLAYABLE_DURATION_SECONDS = 120;

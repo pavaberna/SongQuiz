@@ -51,6 +51,9 @@ import {
   createGameCommandVoiceInstruction,
   createResumeVoiceInstruction,
 } from "./services/voice/gameVoiceService";
+import { MAX_PLAYERS, MIN_PLAYERS } from "./config/gameRules";
+import { transcriptionContexts } from "./types/speech";
+import type { TranscriptionContext } from "./types/speech";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -72,6 +75,7 @@ app.get("/api/health", (req, res) => {
 app.post("/api/dev/gemini-songs", async (req, res) => {
   try {
     const players = Number(req.body.players);
+
     const decade =
       typeof req.body.decade === "string" ? req.body.decade.trim() : "";
     const genre =
@@ -86,8 +90,14 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
 
     const language = rawLanguage;
 
-    if (!Number.isInteger(players) || players < 1) {
-      res.status(400).json({ error: "players must be a positive integer." });
+    if (
+      !Number.isInteger(players) ||
+      players < MIN_PLAYERS ||
+      players > MAX_PLAYERS
+    ) {
+      res.status(400).json({
+        error: `players must be an integer between ${MIN_PLAYERS} and ${MAX_PLAYERS}.`,
+      });
       return;
     }
 
@@ -414,7 +424,29 @@ app.post(
         return;
       }
 
-      const text = await transcribeAudio(file);
+      const rawContext =
+        typeof req.body.context === "string" ? req.body.context.trim() : "";
+
+      const rawLanguage =
+        typeof req.body.language === "string" ? req.body.language.trim() : "";
+
+      if (rawLanguage !== "hu" && rawLanguage !== "en") {
+        res.status(400).json({ error: "language must be 'hu' or 'en'." });
+        return;
+      }
+
+      if (!transcriptionContexts.includes(rawContext as TranscriptionContext)) {
+        res.status(400).json({ error: "Invalid transcription context." });
+        return;
+      }
+
+      const context = rawContext as TranscriptionContext;
+      const language = rawLanguage;
+
+      const text = await transcribeAudio(file, {
+        context,
+        language,
+      });
 
       res.json({ text });
     } catch (error) {
@@ -436,7 +468,13 @@ app.post(
         return;
       }
 
-      const text = await transcribeAudio(file);
+      const session = await readCurrentGameSession();
+
+      const text = await transcribeAudio(file, {
+        context: "song_answer",
+        language: session.language,
+      });
+
       const result = await submitAnswer(text);
 
       const voice = createAnswerVoiceInstruction(result);
