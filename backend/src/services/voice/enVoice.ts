@@ -44,4 +44,5 @@ export const enVoiceLines: VoiceLineCatalog = {
   restart_ask_decade:
     "A new game is starting. Which decade would you like the songs to be from?",
   pass_hint: "If you do not know the answer, just say pass or skip.",
+  setup_retry: "I didn't understand. Could you repeat that?",
 };

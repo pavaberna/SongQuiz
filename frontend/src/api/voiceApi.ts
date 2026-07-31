@@ -1,6 +1,8 @@
 import type { GameLanguage } from "../types/language";
 import type { StaticVoiceLineKey } from "../types/voice";
 import { API_BASE_URL } from "./apiConfig";
+import type { ApiErrorResponse } from "../types/api";
+import type { RoundVoiceInstruction } from "../types/game";
 
 export function playVoiceLine(
   language: GameLanguage,
@@ -25,5 +27,62 @@ export function playVoiceLine(
     );
 
     audio.play().catch(reject);
+  });
+}
+
+export async function playRoundVoiceLine(
+  language: GameLanguage,
+  instruction: RoundVoiceInstruction,
+): Promise<void> {
+  const url = new URL("/api/dev/voice-line-audio-preview", API_BASE_URL);
+
+  const response = await fetch(url, {
+    body: JSON.stringify({
+      key: instruction.key,
+      params: instruction.params,
+      language,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorData = (await response
+      .json()
+      .catch(() => null)) as ApiErrorResponse | null;
+    throw new Error(
+      errorData?.error ??
+        `Voice line generation failed with status ${response.status}.`,
+    );
+  }
+
+  const audioBlob = await response.blob();
+  const audioUrl = URL.createObjectURL(audioBlob);
+  const audio = new Audio(audioUrl);
+
+  return new Promise<void>((resolve, reject) => {
+    audio.addEventListener(
+      "ended",
+      () => {
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      },
+      { once: true },
+    );
+
+    audio.addEventListener(
+      "error",
+      () => {
+        URL.revokeObjectURL(audioUrl);
+        reject(new Error("The round voice line could not be played."));
+      },
+      { once: true },
+    );
+    audio.play().catch((error) => {
+      URL.revokeObjectURL(audioUrl);
+      reject(error);
+    });
   });
 }

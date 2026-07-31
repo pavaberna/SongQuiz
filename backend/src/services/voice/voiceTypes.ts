@@ -17,6 +17,7 @@ export const voiceLineKeys = [
   "game_resumed",
   "restart_ask_decade",
   "pass_hint",
+  "setup_retry",
 ] as const;
 
 export type VoiceLineKey = (typeof voiceLineKeys)[number];

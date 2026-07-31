@@ -1,11 +1,17 @@
 import { useState } from "react";
 
-import { askAndTranscribe } from "./features/game-setup/askAndTranscribe";
+import { askUntilValid } from "./features/game-setup/askUntilValid";
 import { GameSetup } from "./features/game-setup/GameSetup";
+import { generateSongs } from "./api/songApi";
 import { parsePlayerCount } from "./features/game-setup/parsePlayerCount";
+import { parseTextAnswer } from "./features/game-setup/parseTextAnswer";
+import { prepareGame } from "./features/game-setup/prepareGame";
+import { playRoundVoiceLine, playVoiceLine } from "./api/voiceApi";
+import { startRound } from "./api/gameApi";
+import type { GameRound } from "./types/game";
 import type { GameSetupStatus } from "./types/gameSetup";
 import type { GameLanguage } from "./types/language";
-import { generateSongs } from "./api/songApi";
+import { Gameplay } from "./features/gameplay/Gameplay";
 
 function App() {
   const [language, setLanguage] = useState<GameLanguage>("hu");
@@ -18,6 +24,8 @@ function App() {
   const [generatedSongCount, setGeneratedSongCount] = useState<number | null>(
     null,
   );
+  const [gameSessionId, setGameSessionId] = useState<string | null>(null);
+  const [currentRound, setCurrentRound] = useState<GameRound | null>(null);
 
   async function handleStart() {
     setDecade(null);
@@ -26,93 +34,97 @@ function App() {
     setTranscript(null);
     setGenre(null);
     setGeneratedSongCount(null);
+    setGameSessionId(null);
+    setCurrentRound(null);
 
     try {
-      const playerTranscript = await askAndTranscribe({
+      const playerAnswer = await askUntilValid({
         language,
         onStatusChange: setSetupStatus,
-        voiceLineKey: "welcome_player_count",
+        parseAnswer: parsePlayerCount,
         transcriptionContext: "player_count",
+        voiceLineKey: "welcome_player_count",
       });
 
-      setTranscript(playerTranscript);
+      const parsedPlayers = playerAnswer.value;
 
-      const parsedPlayers = parsePlayerCount(playerTranscript);
-
-      if (parsedPlayers === null) {
-        setStartError(
-          language === "hu"
-            ? "Nem értettem a játékosok számát. Mondj egy számot 1 és 20 között."
-            : "I could not understand the player count. Say a number between 1 and 20.",
-        );
-        return;
-      }
-
+      setTranscript(playerAnswer.transcript);
       setPlayers(parsedPlayers);
-      setTranscript(null);
 
-      const decadeTranscript = await askAndTranscribe({
+      const decadeAnswer = await askUntilValid({
         language,
         onStatusChange: setSetupStatus,
-        voiceLineKey: "ask_decade",
+        parseAnswer: parseTextAnswer,
         transcriptionContext: "decade",
+        voiceLineKey: "ask_decade",
       });
 
-      const trimmedDecade = decadeTranscript.trim();
-
-      if (trimmedDecade === "") {
-        setStartError(
-          language === "hu"
-            ? "Nem értettem az évtizedet."
-            : "I could not understand the decade.",
-        );
-        return;
-      }
+      const trimmedDecade = decadeAnswer.value;
 
       setDecade(trimmedDecade);
-      setTranscript(null);
+      setTranscript(decadeAnswer.transcript);
 
-      const genreTranscript = await askAndTranscribe({
+      const genreAnswer = await askUntilValid({
         language,
         onStatusChange: setSetupStatus,
-        voiceLineKey: "ask_genre",
+        parseAnswer: parseTextAnswer,
         transcriptionContext: "genre",
+        voiceLineKey: "ask_genre",
       });
 
-      const trimmedGenre = genreTranscript.trim();
-
-      if (trimmedGenre === "") {
-        setStartError(
-          language === "hu"
-            ? "Nem értettem a műfajt."
-            : "I could not understand the genre.",
-        );
-        return;
-      }
+      const trimmedGenre = genreAnswer.value;
 
       setGenre(trimmedGenre);
-      setTranscript(genreTranscript);
+      setTranscript(genreAnswer.transcript);
       setSetupStatus("generating");
 
-      const response = await generateSongs({
+      const gamePromise = generateSongs({
         decade: trimmedDecade,
         genre: trimmedGenre,
         language,
         players: parsedPlayers,
+      }).then((response) => {
+        setGeneratedSongCount(response.count);
+        setSetupStatus("preparing");
+
+        return prepareGame(response.count);
       });
 
-      setGeneratedSongCount(response.count);
+      const [session] = await Promise.all([
+        gamePromise,
+        playVoiceLine(language, "explain_rules"),
+      ]);
+
+      setGameSessionId(session.id);
+
+      const roundResult = await startRound();
+      const startedRound = roundResult.session.currentRound;
+      const roundVoice = roundResult.voice;
+
+      if (startedRound === null || roundVoice === null) {
+        throw new Error("The first round could not be started.");
+      }
+
+      setSetupStatus("speaking");
+
+      await playRoundVoiceLine(language, roundVoice);
+
+      setCurrentRound(startedRound);
     } catch (error) {
       console.error(error);
 
       setStartError(
         language === "hu"
-          ? "Nem sikerült feldolgozni a hangot."
-          : "The audio could not be processed.",
+          ? "Hiba történt a játék előkészítése közben"
+          : "An error occurred while preparing the game.",
       );
     } finally {
       setSetupStatus("idle");
     }
+  }
+
+  if (currentRound !== null) {
+    return <Gameplay currentRound={currentRound} language={language} />;
   }
 
   return (
@@ -127,6 +139,7 @@ function App() {
       decade={decade}
       genre={genre}
       generatedSongCount={generatedSongCount}
+      gameSessionId={gameSessionId}
     />
   );
 }

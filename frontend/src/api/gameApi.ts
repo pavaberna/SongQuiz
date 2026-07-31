@@ -1,0 +1,66 @@
+import type { ApiErrorResponse } from "../types/api";
+import type {
+  PrepareGameSessionResponse,
+  StartRoundResponse,
+} from "../types/game";
+import { API_BASE_URL } from "./apiConfig";
+
+export async function prepareGameSession(
+  enrichmentLimit: number,
+): Promise<PrepareGameSessionResponse> {
+  const url = new URL("/api/dev/prepare-game-session", API_BASE_URL);
+
+  const response = await fetch(url, {
+    body: JSON.stringify({ enrichmentLimit }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorData = (await response
+      .json()
+      .catch(() => null)) as ApiErrorResponse | null;
+
+    throw new Error(
+      errorData?.error ??
+        `Game preparation failed with status ${response.status}.`,
+    );
+  }
+
+  const data = (await response.json()) as PrepareGameSessionResponse;
+
+  if (typeof data.ready !== "boolean") {
+    throw new Error("The game preparation response is invalid.");
+  }
+
+  return data;
+}
+
+export async function startRound(): Promise<StartRoundResponse> {
+  const url = new URL("/api/dev/start-round", API_BASE_URL);
+
+  const response = await fetch(url, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorData = (await response
+      .json()
+      .catch(() => null)) as ApiErrorResponse | null;
+
+    throw new Error(
+      errorData?.error ??
+        `Starting the round failed with status ${response.status}.`,
+    );
+  }
+
+  const data = (await response.json()) as StartRoundResponse;
+
+  if (typeof data?.session?.id !== "string") {
+    throw new Error("The start round response is invalid.");
+  }
+
+  return data;
+}

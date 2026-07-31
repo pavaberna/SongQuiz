@@ -17,6 +17,9 @@ const textByLanguage = {
     transcribingStatus: "Válasz feldolgozása...",
     transcriptLabel: "Felismert válasz",
     generatingStatus: "Dalok összeállítása...",
+    generatedSongsLabel: "Generált dalok",
+    prepareGame: "Játék előkészítése...",
+    gameSessionId: "Játék azonosító",
   },
   en: {
     languageLabel: "Language",
@@ -29,6 +32,9 @@ const textByLanguage = {
     transcribingStatus: "Processing your answer...",
     transcriptLabel: "Recognized answer",
     generatingStatus: "Preparing songs...",
+    generatedSongsLabel: "Generated songs",
+    prepareGame: "Preparing game...",
+    gameSessionId: "Game session ID",
   },
 };
 
@@ -43,6 +49,7 @@ export function GameSetup({
   setupStatus,
   transcript,
   generatedSongCount,
+  gameSessionId,
 }: GameSetupProps) {
   const text = textByLanguage[language];
   const isBusy = setupStatus !== "idle";
@@ -73,6 +80,7 @@ export function GameSetup({
         {setupStatus === "recording" && <p>{text.recordingStatus}</p>}
         {setupStatus === "transcribing" && <p>{text.transcribingStatus}</p>}
         {setupStatus === "generating" && <p>{text.generatingStatus}</p>}
+        {setupStatus === "preparing" && <p>{text.prepareGame}</p>}
         {transcript && (
           <p>
             {text.transcriptLabel}: {transcript}
@@ -94,7 +102,14 @@ export function GameSetup({
           </p>
         )}
         {generatedSongCount !== null && (
-          <p>Generált dalok: {generatedSongCount}</p>
+          <p>
+            {text.generatedSongsLabel}: {generatedSongCount}
+          </p>
+        )}
+        {gameSessionId !== null && (
+          <p>
+            {text.generatedSongsLabel}: {gameSessionId}
+          </p>
         )}
         {errorMessage && <p className="text-danger">{errorMessage}</p>}
       </section>

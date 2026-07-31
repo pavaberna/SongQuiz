@@ -7,7 +7,8 @@ export type GameSetupStatus =
   | "speaking"
   | "recording"
   | "transcribing"
-  | "generating";
+  | "generating"
+  | "preparing";
 
 export type GameSetupProps = {
   errorMessage: string | null;
@@ -20,6 +21,7 @@ export type GameSetupProps = {
   decade: string | null;
   genre: string | null;
   generatedSongCount: number | null;
+  gameSessionId: string | null;
 };
 
 export type AskAndTranscribeOptions = {
@@ -27,4 +29,13 @@ export type AskAndTranscribeOptions = {
   onStatusChange: (status: GameSetupStatus) => void;
   voiceLineKey: StaticVoiceLineKey;
   transcriptionContext: TranscriptionContext;
+};
+
+export type AskUntilValidOptions<T> = AskAndTranscribeOptions & {
+  parseAnswer: (transcript: string) => T | null;
+};
+
+export type ValidSetupAnswer<T> = {
+  transcript: string;
+  value: T;
 };
