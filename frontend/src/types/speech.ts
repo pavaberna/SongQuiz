@@ -5,7 +5,8 @@ export type TranscriptionContext =
   | "decade"
   | "genre"
   | "player_count"
-  | "song_answer";
+  | "song_answer"
+  | "replay_decision";
 
 export type TranscribeAudioOptions = {
   context: TranscriptionContext;

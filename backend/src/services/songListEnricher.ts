@@ -53,6 +53,8 @@ async function enrichSongWithCacheOrYoutube(
     title: song.title,
   });
 
+  song.artist = youtubeData.artist;
+  song.title = youtubeData.title;
   song.youtubeId = youtubeData.youtubeId;
   song.duration = youtubeData.duration;
 

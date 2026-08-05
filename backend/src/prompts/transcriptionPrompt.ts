@@ -16,6 +16,8 @@ const transcriptionPrompts: Record<
       "Song Quiz setup. The speaker says a player count between one and twenty.",
     song_answer:
       "Song Quiz answer. The speaker may name a music artist and a song title. Preserve names and titles accurately.",
+    replay_decision:
+      "Song Quiz replay decision. The speaker answers whether they want another game. Expected words include yes, yeah, no, and nope.",
   },
   hu: {
     command:
@@ -28,6 +30,8 @@ const transcriptionPrompts: Record<
       "Song Quiz beállítás. A beszélő egy és húsz közötti játékosszámot mond.",
     song_answer:
       "Song Quiz megfejtés. A beszélő egy zenei előadót és egy dalcímet mondhat. Az előadó- és dalcímneveket pontosan írd át.",
+    replay_decision:
+      "Song Quiz újrajátszási döntés. A beszélő arra válaszol, hogy szeretne-e új játékot. Várható szavak: igen, persze és nem.",
   },
 };
 

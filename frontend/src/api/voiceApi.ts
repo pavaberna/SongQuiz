@@ -1,8 +1,7 @@
 import type { GameLanguage } from "../types/language";
-import type { StaticVoiceLineKey } from "../types/voice";
+import type { StaticVoiceLineKey, VoiceInstruction } from "../types/voice";
 import { API_BASE_URL } from "./apiConfig";
 import type { ApiErrorResponse } from "../types/api";
-import type { RoundVoiceInstruction } from "../types/game";
 
 export function playVoiceLine(
   language: GameLanguage,
@@ -30,9 +29,9 @@ export function playVoiceLine(
   });
 }
 
-export async function playRoundVoiceLine(
+export async function playVoiceInstruction(
   language: GameLanguage,
-  instruction: RoundVoiceInstruction,
+  instruction: VoiceInstruction,
 ): Promise<void> {
   const url = new URL("/api/dev/voice-line-audio-preview", API_BASE_URL);
 
@@ -76,7 +75,7 @@ export async function playRoundVoiceLine(
       "error",
       () => {
         URL.revokeObjectURL(audioUrl);
-        reject(new Error("The round voice line could not be played."));
+        reject(new Error("The voice instruction could not be played."));
       },
       { once: true },
     );

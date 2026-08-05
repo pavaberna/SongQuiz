@@ -3,6 +3,7 @@ import type {
   PrepareGameSessionResponse,
   StartRoundResponse,
 } from "../types/game";
+import type { GameSummaryResponse } from "../types/gameSummary";
 import { API_BASE_URL } from "./apiConfig";
 
 export async function prepareGameSession(
@@ -60,6 +61,33 @@ export async function startRound(): Promise<StartRoundResponse> {
 
   if (typeof data?.session?.id !== "string") {
     throw new Error("The start round response is invalid.");
+  }
+
+  return data;
+}
+
+export async function getGameSummary(): Promise<GameSummaryResponse> {
+  const url = new URL("/api/dev/game-summary", API_BASE_URL);
+
+  const response = await fetch(url, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const errorData = (await response
+      .json()
+      .catch(() => null)) as ApiErrorResponse | null;
+
+    throw new Error(errorData?.error ?? "no game summary response");
+  }
+
+  const data = (await response.json()) as GameSummaryResponse;
+
+  if (
+    !Array.isArray(data?.summary?.leaderboard) ||
+    data?.voice?.key !== "game_summary"
+  ) {
+    throw new Error("The game summary response is invalid.");
   }
 
   return data;

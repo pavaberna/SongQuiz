@@ -6,6 +6,7 @@ export const transcriptionContexts = [
   "genre",
   "player_count",
   "song_answer",
+  "replay_decision",
 ] as const;
 
 export type TranscriptionContext = (typeof transcriptionContexts)[number];

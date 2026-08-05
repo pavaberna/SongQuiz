@@ -4,16 +4,13 @@ import {
   MIN_PLAYABLE_DURATION_SECONDS,
   MAX_PLAYABLE_DURATION_SECONDS,
 } from "../config/songRules";
-
-export type FindYoutubeVideoParams = {
-  artist: string;
-  title: string;
-};
-
-export type YoutubeVideoMatch = {
-  youtubeId: string;
-  duration: number;
-};
+import {
+  type FindYoutubeVideoParams,
+  type YoutubeSongMatch,
+  type YoutubeVideoMatch,
+} from "../types/youtube";
+import { correctSongMetadata } from "./songMetadataCorrectionService";
+import { validateSongVideo } from "./youtubeVideoValidator";
 
 function isPlayableDuration(duration: number): boolean {
   return (
@@ -28,7 +25,7 @@ function parseYoutubeDuration(duration: string): number {
 
 export async function findYoutubeVideoForSong(
   params: FindYoutubeVideoParams,
-): Promise<YoutubeVideoMatch> {
+): Promise<YoutubeSongMatch> {
   const apiKey = process.env.YOUTUBE_API_KEY;
 
   if (!apiKey) {
@@ -61,15 +58,27 @@ export async function findYoutubeVideoForSong(
   }
 
   const videoResponse = await youtube.videos.list({
-    part: ["contentDetails"],
+    part: ["contentDetails", "snippet", "status"],
     id: youtubeIds,
   });
+
+  let correctionAttempted = false;
 
   for (const video of videoResponse.data.items ?? []) {
     const youtubeId = video.id;
     const durationText = video.contentDetails?.duration;
+    const videoTitle = video.snippet?.title;
+    const channelTitle = video.snippet?.channelTitle;
+    const description = (video.snippet?.description ?? "").slice(0, 1000);
+    const embeddable = video.status?.embeddable;
 
-    if (!youtubeId || !durationText) {
+    if (
+      !youtubeId ||
+      !durationText ||
+      !videoTitle ||
+      !channelTitle ||
+      embeddable !== true
+    ) {
       continue;
     }
 
@@ -79,10 +88,53 @@ export async function findYoutubeVideoForSong(
       continue;
     }
 
-    return {
+    const videoMatch: YoutubeVideoMatch = {
       youtubeId,
       duration,
+      videoTitle,
+      channelTitle,
+      description,
+      embeddable,
     };
+
+    const validation = validateSongVideo(params, videoMatch);
+
+    if (validation.blocked || !validation.artistMatches) {
+      continue;
+    }
+
+    if (!correctionAttempted) {
+      correctionAttempted = true;
+
+      try {
+        const correctedSong = await correctSongMetadata(params, videoMatch);
+
+        const correctedValidation = validateSongVideo(
+          correctedSong,
+          videoMatch,
+        );
+
+        if (
+          !correctedValidation.blocked &&
+          correctedValidation.artistMatches &&
+          correctedValidation.titleMatches
+        ) {
+          return {
+            ...videoMatch,
+            ...correctedSong,
+          };
+        }
+      } catch (error) {
+        console.warn("Song metadata correction failed:", error);
+      }
+    }
+
+    if (validation.titleMatches) {
+      return {
+        ...videoMatch,
+        ...params,
+      };
+    }
   }
-  throw new Error(`No playable YouTube video found for: ${query}`);
+  throw new Error(`No matching playable YouTube video found for: ${query}`);
 }

@@ -21,6 +21,9 @@ EVALUATION RULES:
 1. The player's answer may contain minor transcription errors, phonetic mishearings, accent artifacts, or background music interference.
 2. Ignore minor grammatical artifacts, missing or extra articles, missing punctuation, and small suffix differences.
 3. If the track has multiple artists, matching either the main artist or a prominent featured artist counts as a valid artist match.
+4. Song titles may use deliberate typography, abbreviations, numbers, or symbols that represent spoken words. Evaluate the intended spoken pronunciation, not only the literal written characters.
+5. Treat a naturally spoken version of a stylized title as correct. For example, the Hungarian spoken word "mindegy" must match the official stylized title "MIND1".
+6. Do not mark a title incorrect merely because the player pronounced its normalized word form instead of spelling out its typography, digits, or symbols.
 
 
 BOOLEAN MATCHING DEFINITIONS:
