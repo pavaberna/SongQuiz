@@ -6,8 +6,6 @@ const transcriptionPrompts: Record<
   Record<TranscriptionContext, string>
 > = {
   en: {
-    command:
-      "Song Quiz voice command. Expected words include Arise, pause, resume, finish, and end game.",
     decade:
       "Song Quiz setup. The speaker names a music decade, such as eighties, nineties, two thousands, twenty tens, or mixed.",
     genre:
@@ -20,8 +18,6 @@ const transcriptionPrompts: Record<
       "Song Quiz replay decision. The speaker answers whether they want another game. Expected words include yes, yeah, no, and nope.",
   },
   hu: {
-    command:
-      "Song Quiz hangparancs. Várható szavak: Arise, szünet, folytatás, folytasd és befejezés.",
     decade:
       "Song Quiz beállítás. A beszélő zenei évtizedet mond, például nyolcvanas, kilencvenes, kétezres, kétezer-tízes évek vagy vegyes.",
     genre:

@@ -14,6 +14,7 @@ import type { GameLanguage } from "./types/language";
 import { Gameplay } from "./features/gameplay/Gameplay";
 import type { StaticVoiceLineKey } from "./types/voice";
 import type { ReplaySetup } from "./types/replay";
+import { parseMusicPeriod } from "./features/game-setup/parseMusicPeriod";
 
 function App() {
   const [language, setLanguage] = useState<GameLanguage>("hu");
@@ -36,7 +37,7 @@ function App() {
     const decadeAnswer = await askUntilValid({
       language,
       onStatusChange: setSetupStatus,
-      parseAnswer: parseTextAnswer,
+      parseAnswer: parseMusicPeriod,
       transcriptionContext: "decade",
       voiceLineKey: decadeVoiceLineKey,
     });
@@ -157,11 +158,24 @@ function App() {
     }
   }
 
+  function handleGameEnd(): void {
+    setCurrentRound(null);
+    setPlayers(null);
+    setDecade(null);
+    setGenre(null);
+    setTranscript(null);
+    setGeneratedSongCount(null);
+    setGameSessionId(null);
+    setStartError(null);
+    setSetupStatus("idle");
+  }
+
   if (currentRound !== null) {
     return (
       <Gameplay
         currentRound={currentRound}
         language={language}
+        onGameEnd={handleGameEnd}
         onReplay={handleReplay}
         onRoundChange={setCurrentRound}
       />

@@ -2,7 +2,6 @@ import type { SubmitAnswerResult } from "../../types/answer";
 import type {
   GameSession,
   GameVoiceInstruction,
-  HandleGameCommandResult,
 } from "../../types/game";
 import type { VoiceLineKey } from "./voiceTypes";
 
@@ -59,18 +58,3 @@ export function createResumeVoiceInstruction(
   };
 }
 
-export function createGameCommandVoiceInstruction(
-  result: HandleGameCommandResult,
-): GameVoiceInstruction {
-  switch (result.command) {
-    case "pause":
-      return { key: "game_paused" };
-
-    case "resume":
-      return createResumeVoiceInstruction(result.result);
-
-    case "finish":
-    case "end":
-      return { key: "game_stopped" };
-  }
-}

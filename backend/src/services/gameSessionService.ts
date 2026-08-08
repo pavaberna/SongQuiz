@@ -375,6 +375,10 @@ export async function handleGameCommand(
 ): Promise<HandleGameCommandResult> {
   const command = normalizeGameCommand(rawCommand);
 
+  if (command === null) {
+    throw new Error(`Unknown game command: ${rawCommand}`);
+  }
+
   switch (command) {
     case "pause": {
       const result = await pauseGame();
@@ -405,13 +409,6 @@ export async function handleGameCommand(
       };
     }
   }
-}
-
-export function handleWakeCommand(
-  transcript: string,
-): Promise<HandleGameCommandResult> {
-  const command = extractWakeCommand(transcript);
-  return handleGameCommand(command);
 }
 
 export async function prepareReplay(): Promise<ReplayGameSetup> {
@@ -488,7 +485,7 @@ function addGameEvent(
   session.events.push(event);
 }
 
-function normalizeGameCommand(rawCommand: string): GameCommand {
+function normalizeGameCommand(rawCommand: string): GameCommand | null {
   const command = normalizeSpokenWords(rawCommand).join(" ");
 
   if (
@@ -526,24 +523,7 @@ function normalizeGameCommand(rawCommand: string): GameCommand {
     return "end";
   }
 
-  throw new Error(`Unknown game command: ${rawCommand}`);
-}
-
-function extractWakeCommand(transcript: string): string {
-  const wakeWord = "arise";
-  const words = normalizeSpokenWords(transcript);
-
-  if (words[0] !== wakeWord) {
-    throw new Error("Wake word was not detected.");
-  }
-
-  const command = words.slice(1).join(" ");
-
-  if (!command) {
-    throw new Error("Command is missing after wake word.");
-  }
-
-  return command;
+  return null;
 }
 
 function selectGameSongs(currentSongList: CurrentSongListFile): GameSong[] {

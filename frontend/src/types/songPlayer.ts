@@ -7,4 +7,5 @@ export type SongPlayerProps = {
   onError: (message: string) => void;
   startOffset: number;
   youtubeId: string;
+  isPaused: boolean;
 };

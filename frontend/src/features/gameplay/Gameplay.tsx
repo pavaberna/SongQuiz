@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { SongPlayer } from "./SongPlayer";
 import type { SubmitAudioAnswerResponse } from "../../types/answer";
 import type { GameplayPhase, GameplayProps } from "../../types/gameplay";
@@ -7,6 +7,9 @@ import { playVoiceInstruction, playVoiceLine } from "../../api/voiceApi";
 import { getGameSummary, startRound } from "../../api/gameApi";
 import type { GameSummary } from "../../types/gameSummary";
 import { listenForReplayDecision } from "./listenForReplayDecision";
+import { sendGameCommand } from "../../api/gameCommandApi";
+import type { GameCommand } from "../../types/gameCommand";
+import { GameControls } from "./GameControls";
 
 const textByLanguage = {
   hu: {
@@ -22,6 +25,9 @@ const textByLanguage = {
     gameOver: "A játék véget ért",
     ranking: "Eredmény",
     winners: "Nyertes játékosok",
+    pause: "Szünet",
+    resume: "Folytatás",
+    stop: "Játék leállítása",
   },
   en: {
     listen: "Listen!",
@@ -36,12 +42,16 @@ const textByLanguage = {
     gameOver: "Game over",
     ranking: "Results",
     winners: "Winners",
+    pause: "Pause",
+    resume: "Resume",
+    stop: "End game",
   },
 };
 
 export function Gameplay({
   currentRound,
   language,
+  onGameEnd,
   onReplay,
   onRoundChange,
 }: GameplayProps) {
@@ -51,15 +61,88 @@ export function Gameplay({
   const [gameplayError, setGameplayError] = useState<string | null>(null);
   const [phase, setPhase] = useState<GameplayPhase>("playing");
   const [gameSummary, setGameSummary] = useState<GameSummary | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isCommandPending, setIsCommandPending] = useState(false);
+
+  const answerAbortControllerRef = useRef<AbortController | null>(null);
 
   const youtubeId = currentRound.currentSong.youtubeId;
+
+  function createAnswerSignal(): AbortSignal {
+    answerAbortControllerRef.current?.abort();
+
+    const controller = new AbortController();
+    answerAbortControllerRef.current = controller;
+
+    return controller.signal;
+  }
+
+  function cancelAnswerRecording(): void {
+    answerAbortControllerRef.current?.abort();
+    answerAbortControllerRef.current = null;
+  }
+
+  function isCancelledError(error: unknown): boolean {
+    return (
+      error instanceof Error &&
+      (error.message === "Audio recording was cancelled." ||
+        error.name === "AbortError")
+    );
+  }
+
+  async function handleControlCommand(command: GameCommand): Promise<void> {
+    setGameplayError(null);
+    setIsCommandPending(true);
+
+    if (command === "pause" || command === "finish" || command === "end") {
+      cancelAnswerRecording();
+    }
+
+    try {
+      const response = await sendGameCommand(command);
+      const completedCommand = response.result.command;
+
+      if (completedCommand === "pause") {
+        setIsPaused(true);
+        return;
+      }
+
+      if (completedCommand === "resume") {
+        setIsPaused(false);
+
+        if (phase === "answering") {
+          void handleClipComplete();
+        }
+
+        return;
+      }
+
+      setIsPaused(true);
+
+      if (completedCommand === "finish") {
+        await showGameSummary();
+        return;
+      }
+
+      onGameEnd();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "The game command could not be handled.";
+
+      setGameplayError(message);
+    } finally {
+      setIsCommandPending(false);
+    }
+  }
 
   async function handleClipComplete() {
     setGameplayError(null);
     setPhase("answering");
 
     try {
-      const response = await recordAndSubmitAnswer();
+      const response = await recordAndSubmitAnswer(createAnswerSignal());
 
       setAnswerResponse(response);
       setPhase("result");
@@ -82,6 +165,10 @@ export function Gameplay({
 
       await startNextRound();
     } catch (error) {
+      if (isCancelledError(error)) {
+        return;
+      }
+
       const message =
         error instanceof Error ? error.message : "Unknown gameplay error.";
 
@@ -103,6 +190,7 @@ export function Gameplay({
 
     setAnswerResponse(null);
     setGameplayError(null);
+    setIsPaused(false);
     setPhase("playing");
     onRoundChange(nextRound);
   }
@@ -140,12 +228,23 @@ export function Gameplay({
           coverText={text.cover}
           manualPlayText={text.manualPlay}
           isCovered={phase !== "result"}
+          isPaused={isPaused}
           onComplete={handleClipComplete}
           onError={(message) => setGameplayError(message)}
           startOffset={currentRound.startOffset}
           youtubeId={youtubeId}
         />
       )}
+
+      <div className="flex gap-3">
+        <GameControls
+          disabled={
+            isCommandPending || phase === "result" || phase === "finished"
+          }
+          isPaused={isPaused}
+          onCommand={(command) => void handleControlCommand(command)}
+        />
+      </div>
 
       {phase === "answering" && <p>{text.answering}</p>}
 

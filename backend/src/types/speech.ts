@@ -1,7 +1,6 @@
 import type { GameLanguage } from "./language";
 
 export const transcriptionContexts = [
-  "command",
   "decade",
   "genre",
   "player_count",

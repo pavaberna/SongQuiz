@@ -8,6 +8,7 @@ export function SongPlayer({
   clipDuration,
   coverText,
   isCovered,
+  isPaused,
   onComplete,
   onError,
   startOffset,
@@ -25,6 +26,21 @@ export function SongPlayer({
       }
     };
   }, []);
+
+  useEffect(() => {
+    const player = playerRef.current;
+
+    if (player === null) {
+      return;
+    }
+
+    if (isPaused) {
+      player.pauseVideo();
+      return;
+    }
+
+    player.playVideo();
+  }, [isPaused]);
 
   const options: YouTubeProps["opts"] = {
     height: "100%",

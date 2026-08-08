@@ -5,6 +5,7 @@ import type { ReplaySetup } from "./replay";
 export type GameplayProps = {
   currentRound: GameRound;
   language: GameLanguage;
+  onGameEnd: () => void;
   onRoundChange: (round: GameRound) => void;
   onReplay: (setup: ReplaySetup) => Promise<void>;
 };

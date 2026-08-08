@@ -64,14 +64,19 @@ function containsAllWords(
   );
 }
 
-function hasBlockedVideoWord(videoTitle: string, songTitle: string): boolean {
+function hasBlockedVideoWord(
+  videoTitle: string,
+  song: FindYoutubeVideoParams,
+): boolean {
+  const artistWords = splitSongText(song.artist);
+  const songTitleWords = splitSongText(song.title);
   const videoWords = splitSongText(videoTitle);
-  const songWords = splitSongText(songTitle);
 
   return blockedVideoWords.some(
     (blockedWord) =>
       includesWord(videoWords, blockedWord) &&
-      !includesWord(songWords, blockedWord),
+      !includesWord(artistWords, blockedWord) &&
+      !includesWord(songTitleWords, blockedWord),
   );
 }
 
@@ -79,7 +84,7 @@ export function validateSongVideo(
   song: FindYoutubeVideoParams,
   video: YoutubeVideoMatch,
 ): YoutubeVideoValidation {
-  const blocked = hasBlockedVideoWord(video.videoTitle, song.title);
+  const blocked = hasBlockedVideoWord(video.videoTitle, song);
 
   const videoEvidence = [
     video.videoTitle,

@@ -38,7 +38,7 @@ export async function playVoiceInstruction(
   const response = await fetch(url, {
     body: JSON.stringify({
       key: instruction.key,
-      params: instruction.params,
+      params: "params" in instruction ? instruction.params : undefined,
       language,
     }),
     headers: {

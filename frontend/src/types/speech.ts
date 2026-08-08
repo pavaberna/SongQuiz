@@ -1,7 +1,6 @@
 import type { GameLanguage } from "./language";
 
 export type TranscriptionContext =
-  | "command"
   | "decade"
   | "genre"
   | "player_count"
@@ -11,6 +10,7 @@ export type TranscriptionContext =
 export type TranscribeAudioOptions = {
   context: TranscriptionContext;
   language: GameLanguage;
+  signal?: AbortSignal;
 };
 
 export type TranscriptionResponse = {

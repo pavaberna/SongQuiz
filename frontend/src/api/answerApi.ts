@@ -4,6 +4,7 @@ import { API_BASE_URL } from "./apiConfig";
 
 export async function submitAudioAnswer(
   audio: Blob,
+  signal?: AbortSignal,
 ): Promise<SubmitAudioAnswerResponse> {
   const formData = new FormData();
 
@@ -14,6 +15,7 @@ export async function submitAudioAnswer(
   const response = await fetch(url, {
     body: formData,
     method: "POST",
+    signal,
   });
 
   if (!response.ok) {

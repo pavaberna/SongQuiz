@@ -25,7 +25,6 @@ import {
   submitAnswer,
   getGameSummary,
   handleGameCommand,
-  handleWakeCommand,
   prepareReplay,
   handleReplayDecision,
 } from "./services/gameSessionService";
@@ -48,7 +47,6 @@ import type { VoiceLineParams } from "./services/voice/voiceTypes";
 import type { GameVoiceInstruction } from "./types/game";
 import {
   createAnswerVoiceInstruction,
-  createGameCommandVoiceInstruction,
   createResumeVoiceInstruction,
 } from "./services/voice/gameVoiceService";
 import { MAX_PLAYERS, MIN_PLAYERS } from "./config/gameRules";
@@ -383,29 +381,8 @@ app.post("/api/dev/game-command", async (req, res) => {
     }
 
     const result = await handleGameCommand(command);
-    const voice = createGameCommandVoiceInstruction(result);
 
-    res.json({ result, voice });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    res.status(500).json({ error: message });
-  }
-});
-
-app.post("/api/dev/wake-command", async (req, res) => {
-  try {
-    const transcript =
-      typeof req.body.transcript === "string" ? req.body.transcript.trim() : "";
-
-    if (transcript === "") {
-      res.status(400).json({ error: "transcript is required" });
-      return;
-    }
-
-    const result = await handleWakeCommand(transcript);
-    const voice = createGameCommandVoiceInstruction(result);
-
-    res.json({ result, voice });
+    res.json({ result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });

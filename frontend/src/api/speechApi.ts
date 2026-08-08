@@ -20,6 +20,7 @@ export async function transcribeAudio(
   const response = await fetch(url, {
     body: formData,
     method: "POST",
+    signal: options.signal,
   });
 
   if (!response.ok) {
