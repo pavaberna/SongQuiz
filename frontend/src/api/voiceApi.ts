@@ -3,9 +3,80 @@ import type { StaticVoiceLineKey, VoiceInstruction } from "../types/voice";
 import { API_BASE_URL } from "./apiConfig";
 import type { ApiErrorResponse } from "../types/api";
 
+let activeVoiceAudio: HTMLAudioElement | null = null;
+let isVoicePlaybackPaused = false;
+
+export function pauseVoicePlayback(): void {
+  isVoicePlaybackPaused = true;
+  activeVoiceAudio?.pause();
+}
+
+export function resumeVoicePlayback(): void {
+  isVoicePlaybackPaused = false;
+
+  if (activeVoiceAudio !== null) {
+    void activeVoiceAudio.play().catch(() => undefined);
+  }
+}
+
+function playAudio(
+  audio: HTMLAudioElement,
+  signal?: AbortSignal,
+  onCleanup?: () => void,
+): Promise<void> {
+  activeVoiceAudio = audio;
+
+  return new Promise<void>((resolve, reject) => {
+    function cleanup(): void {
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
+      signal?.removeEventListener("abort", handleAbort);
+
+      if (activeVoiceAudio === audio) {
+        activeVoiceAudio = null;
+      }
+
+      onCleanup?.();
+    }
+
+    function handleEnded(): void {
+      cleanup();
+      resolve();
+    }
+
+    function handleError(): void {
+      cleanup();
+      reject(new Error("The voice line could not be played."));
+    }
+
+    function handleAbort(): void {
+      audio.pause();
+      cleanup();
+      reject(new DOMException("Voice playback was cancelled.", "AbortError"));
+    }
+
+    audio.addEventListener("ended", handleEnded, { once: true });
+    audio.addEventListener("error", handleError, { once: true });
+    signal?.addEventListener("abort", handleAbort, { once: true });
+
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+
+    if (!isVoicePlaybackPaused) {
+      audio.play().catch((error: unknown) => {
+        cleanup();
+        reject(error);
+      });
+    }
+  });
+}
+
 export function playVoiceLine(
   language: GameLanguage,
   key: StaticVoiceLineKey,
+  signal?: AbortSignal,
 ): Promise<void> {
   const url = new URL("/api/dev/voice-line-audio", API_BASE_URL);
 
@@ -16,22 +87,13 @@ export function playVoiceLine(
 
   const audio = new Audio(url.toString());
 
-  return new Promise<void>((resolve, reject) => {
-    audio.addEventListener("ended", () => resolve(), { once: true });
-
-    audio.addEventListener(
-      "error",
-      () => reject(new Error("The voice line could not be played.")),
-      { once: true },
-    );
-
-    audio.play().catch(reject);
-  });
+  return playAudio(audio, signal);
 }
 
 export async function playVoiceInstruction(
   language: GameLanguage,
   instruction: VoiceInstruction,
+  signal?: AbortSignal,
 ): Promise<void> {
   const url = new URL("/api/dev/voice-line-audio-preview", API_BASE_URL);
 
@@ -45,6 +107,7 @@ export async function playVoiceInstruction(
       "Content-Type": "application/json",
     },
     method: "POST",
+    signal,
   });
 
   if (!response.ok) {
@@ -61,27 +124,5 @@ export async function playVoiceInstruction(
   const audioUrl = URL.createObjectURL(audioBlob);
   const audio = new Audio(audioUrl);
 
-  return new Promise<void>((resolve, reject) => {
-    audio.addEventListener(
-      "ended",
-      () => {
-        URL.revokeObjectURL(audioUrl);
-        resolve();
-      },
-      { once: true },
-    );
-
-    audio.addEventListener(
-      "error",
-      () => {
-        URL.revokeObjectURL(audioUrl);
-        reject(new Error("The voice instruction could not be played."));
-      },
-      { once: true },
-    );
-    audio.play().catch((error) => {
-      URL.revokeObjectURL(audioUrl);
-      reject(error);
-    });
-  });
+  return playAudio(audio, signal, () => URL.revokeObjectURL(audioUrl));
 }

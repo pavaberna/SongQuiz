@@ -8,6 +8,7 @@ export async function askUntilValid<T>({
   language,
   onStatusChange,
   parseAnswer,
+  signal,
   transcriptionContext,
   voiceLineKey,
 }: AskUntilValidOptions<T>): Promise<ValidSetupAnswer<T>> {
@@ -17,6 +18,7 @@ export async function askUntilValid<T>({
     const transcript = await askAndTranscribe({
       language,
       onStatusChange,
+      signal,
       transcriptionContext,
       voiceLineKey: currentVoiceLineKey,
     });

@@ -8,6 +8,7 @@ import { API_BASE_URL } from "./apiConfig";
 
 export async function prepareGameSession(
   enrichmentLimit: number,
+  signal?: AbortSignal,
 ): Promise<PrepareGameSessionResponse> {
   const url = new URL("/api/dev/prepare-game-session", API_BASE_URL);
 
@@ -17,6 +18,7 @@ export async function prepareGameSession(
       "Content-Type": "application/json",
     },
     method: "POST",
+    signal,
   });
 
   if (!response.ok) {
@@ -39,11 +41,12 @@ export async function prepareGameSession(
   return data;
 }
 
-export async function startRound(): Promise<StartRoundResponse> {
+export async function startRound(signal?: AbortSignal): Promise<StartRoundResponse> {
   const url = new URL("/api/dev/start-round", API_BASE_URL);
 
   const response = await fetch(url, {
     method: "POST",
+    signal,
   });
 
   if (!response.ok) {

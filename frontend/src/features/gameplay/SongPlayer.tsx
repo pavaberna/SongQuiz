@@ -1,12 +1,13 @@
 import YouTube, { type YouTubePlayer, type YouTubeProps } from "react-youtube";
 import { useEffect, useRef, useState } from "react";
 import type { SongPlayerProps } from "../../types/songPlayer";
+import { TimedProgressBar } from "../../components/ui/TimedProgressBar";
+import { PlayingCoverAnimation } from "./PlayingCoverAnimation";
 
 const AUTOPLAY_CHECK_DELAY_MS = 2000;
 
 export function SongPlayer({
   clipDuration,
-  coverText,
   isCovered,
   isPaused,
   onComplete,
@@ -17,7 +18,11 @@ export function SongPlayer({
 }: SongPlayerProps) {
   const autoplayTimerRef = useRef<number | null>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
+  const [activePlaybackKey, setActivePlaybackKey] = useState<string | null>(
+    null,
+  );
   const [manualPlayRequired, setManualPlayRequired] = useState(false);
+  const playbackKey = `${youtubeId}:${startOffset}`;
 
   useEffect(() => {
     return () => {
@@ -73,6 +78,7 @@ export function SongPlayer({
       window.clearTimeout(autoplayTimerRef.current);
       autoplayTimerRef.current = null;
     }
+    setActivePlaybackKey(playbackKey);
     setManualPlayRequired(false);
   };
 
@@ -103,26 +109,40 @@ export function SongPlayer({
   };
 
   return (
-    <div className="relative h-[200px] w-full max-w-[480px] overflow-hidden sm:h-[270px]">
-      <YouTube
-        className="h-full w-full"
-        iframeClassName="h-full w-full"
-        onReady={handleReady}
-        onPlay={handlePlay}
-        onEnd={handleEnd}
-        onError={handleError}
-        opts={options}
-        videoId={youtubeId}
+    <div className="flex w-full max-w-[480px] flex-col gap-2.5">
+      <div className="relative h-[220px] w-full overflow-hidden rounded-[1.25rem] border border-cyan-400/25 bg-black shadow-[0_0_40px_rgba(6,182,212,0.18)] sm:h-[270px]">
+        <YouTube
+          className="h-full w-full"
+          iframeClassName="h-full w-full"
+          onReady={handleReady}
+          onPlay={handlePlay}
+          onEnd={handleEnd}
+          onError={handleError}
+          opts={options}
+          videoId={youtubeId}
+        />
+        {isCovered && manualPlayRequired && (
+          <button
+            className="absolute inset-0 z-10"
+            onClick={handleManualPlay}
+            type="button"
+          >
+            <PlayingCoverAnimation isPlaying={false} text={manualPlayText} />
+          </button>
+        )}
+
+        {isCovered && !manualPlayRequired && (
+          <div className="absolute inset-0 z-10">
+            <PlayingCoverAnimation isPaused={isPaused} isPlaying />
+          </div>
+        )}
+      </div>
+
+      <TimedProgressBar
+        durationSeconds={clipDuration}
+        isPaused={isPaused}
+        isRunning={activePlaybackKey === playbackKey}
       />
-      {isCovered && (
-        <button
-          className="absolute inset-0 z-10 flex items-center justify-center bg-black"
-          onClick={manualPlayRequired ? handleManualPlay : undefined}
-          type="button"
-        >
-          {manualPlayRequired ? manualPlayText : coverText}
-        </button>
-      )}
     </div>
   );
 }

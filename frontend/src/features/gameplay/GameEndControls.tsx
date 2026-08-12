@@ -1,0 +1,43 @@
+import { RotateCcw, Square } from "lucide-react";
+
+import { Button } from "../../components/ui/Button";
+
+type GameEndControlsProps = {
+  disabled: boolean;
+  newGameLabel: string;
+  onEnd: () => void;
+  onNewGame: () => void;
+  stopLabel: string;
+};
+
+export function GameEndControls({
+  disabled,
+  newGameLabel,
+  onEnd,
+  onNewGame,
+  stopLabel,
+}: GameEndControlsProps) {
+  return (
+    <div className="flex w-full max-w-[480px] items-center justify-center gap-3 rounded-2xl border border-neutral-800 bg-neutral-950/85 px-5 py-3 shadow-[0_0_24px_rgba(6,182,212,0.12)] backdrop-blur">
+      <Button
+        disabled={disabled}
+        onClick={onEnd}
+        size="icon"
+        title={stopLabel}
+        variant="ghost"
+      >
+        <Square size={20} />
+      </Button>
+
+      <Button
+        disabled={disabled}
+        onClick={onNewGame}
+        size="icon"
+        title={newGameLabel}
+        variant="secondary"
+      >
+        <RotateCcw size={20} />
+      </Button>
+    </div>
+  );
+}

@@ -3,13 +3,17 @@ import { SongPlayer } from "./SongPlayer";
 import type { SubmitAudioAnswerResponse } from "../../types/answer";
 import type { GameplayPhase, GameplayProps } from "../../types/gameplay";
 import { recordAndSubmitAnswer } from "./recordAndSubmitAnswer";
-import { playVoiceInstruction, playVoiceLine } from "../../api/voiceApi";
+import { playVoiceInstruction } from "../../api/voiceApi";
 import { getGameSummary, startRound } from "../../api/gameApi";
 import type { GameSummary } from "../../types/gameSummary";
-import { listenForReplayDecision } from "./listenForReplayDecision";
 import { sendGameCommand } from "../../api/gameCommandApi";
 import type { GameCommand } from "../../types/gameCommand";
 import { GameControls } from "./GameControls";
+import { saveGameLogEntry } from "../../services/gameLogStore";
+import { startPlayAgain } from "../../api/replayApi";
+import { AppHeader } from "../../components/layout/AppHeader";
+import { GameEndControls } from "./GameEndControls";
+import { GameResultsTable } from "./GameResultsTable";
 
 const textByLanguage = {
   hu: {
@@ -28,6 +32,10 @@ const textByLanguage = {
     pause: "Szünet",
     resume: "Folytatás",
     stop: "Játék leállítása",
+    newGame: "Új játék",
+    position: "Helyezés",
+    pointUnit: "pont",
+    score: "Pontszám",
   },
   en: {
     listen: "Listen!",
@@ -45,6 +53,10 @@ const textByLanguage = {
     pause: "Pause",
     resume: "Resume",
     stop: "End game",
+    newGame: "New game",
+    position: "Place",
+    pointUnit: "points",
+    score: "Score",
   },
 };
 
@@ -91,11 +103,17 @@ export function Gameplay({
   }
 
   async function handleControlCommand(command: GameCommand): Promise<void> {
+    const previousPausedState = isPaused;
+
     setGameplayError(null);
     setIsCommandPending(true);
 
     if (command === "pause" || command === "finish" || command === "end") {
       cancelAnswerRecording();
+    }
+
+    if (command === "end") {
+      setIsPaused(true);
     }
 
     try {
@@ -126,6 +144,8 @@ export function Gameplay({
 
       onGameEnd();
     } catch (error) {
+      setIsPaused(previousPausedState);
+
       const message =
         error instanceof Error
           ? error.message
@@ -145,6 +165,17 @@ export function Gameplay({
       const response = await recordAndSubmitAnswer(createAnswerSignal());
 
       setAnswerResponse(response);
+      saveGameLogEntry({
+        createdAt: new Date().toISOString(),
+        kind: "answer",
+        roundNumber: currentRound.roundNumber,
+        playerId: response.result.playerId,
+        transcript: response.transcript,
+        correctArtist: response.result.correctAnswer.artist,
+        correctTitle: response.result.correctAnswer.title,
+        pointsAwarded: response.result.pointsAwarded,
+        judgeResult: response.result.judgeResult,
+      });
       setPhase("result");
       try {
         await playVoiceInstruction(language, response.voice);
@@ -200,88 +231,131 @@ export function Gameplay({
     setGameSummary(response.summary);
     setPhase("finished");
     await playVoiceInstruction(language, response.voice);
-    await playVoiceLine(language, "ask_play_again");
-    const replayResponse = await listenForReplayDecision(language);
+  }
 
-    if (replayResponse.result.decision === "replay") {
-      await onReplay(replayResponse.result.setup);
-      return;
+  async function handlePlayAgain(): Promise<void> {
+    setGameplayError(null);
+    setIsCommandPending(true);
+
+    try {
+      const setup = await startPlayAgain();
+      await onReplay(setup);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "The new game could not be started.";
+
+      setGameplayError(message);
+    } finally {
+      setIsCommandPending(false);
     }
-    await playVoiceLine(language, replayResponse.voice.key);
   }
 
   return (
-    <main>
-      <h1>
-        {text.round}: {currentRound.roundNumber}
-      </h1>
+    <main className="song-screen flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 text-foreground sm:px-8 sm:py-6">
+      <AppHeader
+        centerContent={
+          phase === "finished" ? (
+            <GameEndControls
+              disabled={isCommandPending}
+              newGameLabel={text.newGame}
+              onEnd={() => void handleControlCommand("end")}
+              onNewGame={() => void handlePlayAgain()}
+              stopLabel={text.stop}
+            />
+          ) : (
+            <GameControls
+              disabled={isCommandPending || phase === "result"}
+              isPaused={isPaused}
+              labels={{
+                pause: text.pause,
+                resume: text.resume,
+                stop: text.stop,
+              }}
+              onCommand={(command) => void handleControlCommand(command)}
+            />
+          )
+        }
+        isLanguageLocked
+        language={language}
+      />
 
-      <p>
-        {text.player}: {currentRound.currentPlayer.id}
-      </p>
+      <section className="song-fade-in flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-5 self-center py-6">
+        {phase !== "finished" && (
+          <div className="flex w-full max-w-[480px] flex-col items-center gap-5">
+            <div className="flex w-full items-center justify-between rounded-2xl border border-neutral-800 bg-neutral-950/75 px-5 py-3 shadow-[0_0_24px_rgba(217,70,239,0.14)] backdrop-blur">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-cyan-300">
+                {text.round}: {currentRound.roundNumber}
+              </p>
 
-      <p>{text.listen}</p>
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-fuchsia-300">
+                {text.player}: {currentRound.currentPlayer.id}
+              </p>
+            </div>
 
-      {youtubeId !== null && phase !== "finished" && (
-        <SongPlayer
-          clipDuration={currentRound.clipDuration}
-          coverText={text.cover}
-          manualPlayText={text.manualPlay}
-          isCovered={phase !== "result"}
-          isPaused={isPaused}
-          onComplete={handleClipComplete}
-          onError={(message) => setGameplayError(message)}
-          startOffset={currentRound.startOffset}
-          youtubeId={youtubeId}
-        />
-      )}
+            {youtubeId !== null && (
+              <SongPlayer
+                clipDuration={currentRound.clipDuration}
+                coverText={text.cover}
+                manualPlayText={text.manualPlay}
+                isCovered={phase !== "result"}
+                isPaused={isPaused}
+                onComplete={handleClipComplete}
+                onError={(message) => setGameplayError(message)}
+                startOffset={currentRound.startOffset}
+                youtubeId={youtubeId}
+              />
+            )}
 
-      <div className="flex gap-3">
-        <GameControls
-          disabled={
-            isCommandPending || phase === "result" || phase === "finished"
-          }
-          isPaused={isPaused}
-          onCommand={(command) => void handleControlCommand(command)}
-        />
-      </div>
+          </div>
+        )}
 
-      {phase === "answering" && <p>{text.answering}</p>}
-
-      {phase === "result" && answerResponse !== null && (
-        <div>
-          <p>
-            {text.recognizedAnswer}: {answerResponse.transcript}
+        {phase === "answering" && (
+          <p className="w-full max-w-[480px] rounded-full border border-fuchsia-400/30 bg-fuchsia-950/30 px-4 py-2 text-center text-sm font-bold uppercase tracking-[0.16em] text-fuchsia-100">
+            {text.answering}
           </p>
+        )}
 
-          <p>
-            {text.correctAnswer}: {answerResponse.result.correctAnswer.artist} -{" "}
-            {answerResponse.result.correctAnswer.title}
-          </p>
-
-          <p>
-            {text.points}: {answerResponse.result.pointsAwarded}
-          </p>
-        </div>
-      )}
-      {phase === "finished" && gameSummary !== null && (
-        <div>
-          <h2>{text.gameOver}</h2>
-          <h3>{text.ranking}</h3>
-
-          {gameSummary.leaderboard.map((player) => (
-            <p key={player.id}>
-              {player.rank}. {text.player} {player.id}: {player.score}{" "}
-              {text.points}
+        {phase === "result" && answerResponse !== null && (
+          <div className="w-full max-w-[480px] rounded-2xl border border-cyan-400/30 bg-neutral-950/80 px-5 py-5 text-center shadow-[0_0_30px_rgba(6,182,212,0.16)] backdrop-blur">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
+              {text.correctAnswer}
             </p>
-          ))}
 
-          <p>
-            {text.winners}: {gameSummary.winnerIds.join(", ")}
-          </p>
-        </div>
-      )}
-      {gameplayError !== null && <p>{gameplayError}</p>}
+            <p className="mt-2 text-xl font-black text-white">
+              {answerResponse.result.correctAnswer.artist} -{" "}
+              {answerResponse.result.correctAnswer.title}
+            </p>
+
+            <p className="mt-4 text-lg font-black text-amber-300">
+              {answerResponse.result.pointsAwarded} {text.points}
+            </p>
+          </div>
+        )}
+
+        {phase === "finished" && gameSummary !== null && (
+          <div className="flex w-full max-w-2xl flex-col items-center gap-6">
+            <h1 className="bg-gradient-to-r from-fuchsia-300 via-purple-200 to-cyan-300 bg-clip-text text-4xl font-black tracking-tight text-transparent">
+              {text.gameOver}
+            </h1>
+
+            <GameResultsTable
+              entries={gameSummary.leaderboard}
+              labels={{
+                pointUnit: text.pointUnit,
+                player: text.player,
+                points: text.score,
+                position: text.position,
+              }}
+            />
+          </div>
+        )}
+
+        {gameplayError !== null && (
+          <p className="text-center text-danger">{gameplayError}</p>
+        )}
+      </section>
     </main>
   );
 }

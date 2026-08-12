@@ -111,6 +111,12 @@ export function parseMusicPeriod(transcript: string): string | null {
     }
 
     if (numericValue >= 0 && numericValue <= 99) {
+      const transcriptOnlyContainsThisNumber = words.length === 1;
+
+      if (!hasDecadeSuffix && !transcriptOnlyContainsThisNumber) {
+        continue;
+      }
+
       const decade = convertShortDecade(numericValue);
 
       if (decade !== null) {

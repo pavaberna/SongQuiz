@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { askUntilValid } from "./features/game-setup/askUntilValid";
 import { GameSetup } from "./features/game-setup/GameSetup";
@@ -6,7 +6,12 @@ import { generateSongs } from "./api/songApi";
 import { parsePlayerCount } from "./features/game-setup/parsePlayerCount";
 import { parseTextAnswer } from "./features/game-setup/parseTextAnswer";
 import { prepareGame } from "./features/game-setup/prepareGame";
-import { playVoiceInstruction, playVoiceLine } from "./api/voiceApi";
+import {
+  pauseVoicePlayback,
+  playVoiceInstruction,
+  playVoiceLine,
+  resumeVoicePlayback,
+} from "./api/voiceApi";
 import { startRound } from "./api/gameApi";
 import type { GameRound } from "./types/game";
 import type { GameSetupStatus } from "./types/gameSetup";
@@ -15,29 +20,44 @@ import { Gameplay } from "./features/gameplay/Gameplay";
 import type { StaticVoiceLineKey } from "./types/voice";
 import type { ReplaySetup } from "./types/replay";
 import { parseMusicPeriod } from "./features/game-setup/parseMusicPeriod";
+import { saveGameLogEntry } from "./services/gameLogStore";
+import type { GameCommand } from "./types/gameCommand";
+import { sendGameCommand } from "./api/gameCommandApi";
+import { AppLayout } from "./components/layout/AppLayout";
+
+function isSetupCancelled(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "AbortError" ||
+      error.message === "Audio recording was cancelled.")
+  );
+}
 
 function App() {
   const [language, setLanguage] = useState<GameLanguage>("hu");
   const [setupStatus, setSetupStatus] = useState<GameSetupStatus>("idle");
+  const [isSetupActive, setIsSetupActive] = useState(false);
+  const [isSetupPaused, setIsSetupPaused] = useState(false);
+  const [isVoicePlaying, setIsVoicePlaying] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [players, setPlayers] = useState<number | null>(null);
   const [decade, setDecade] = useState<string | null>(null);
   const [genre, setGenre] = useState<string | null>(null);
-  const [generatedSongCount, setGeneratedSongCount] = useState<number | null>(
-    null,
-  );
   const [gameSessionId, setGameSessionId] = useState<string | null>(null);
   const [currentRound, setCurrentRound] = useState<GameRound | null>(null);
+  const setupAbortControllerRef = useRef<AbortController | null>(null);
 
   async function setupGame(
     playerCount: number,
     decadeVoiceLineKey: StaticVoiceLineKey,
+    signal: AbortSignal,
   ) {
     const decadeAnswer = await askUntilValid({
       language,
       onStatusChange: setSetupStatus,
       parseAnswer: parseMusicPeriod,
+      signal,
       transcriptionContext: "decade",
       voiceLineKey: decadeVoiceLineKey,
     });
@@ -46,11 +66,19 @@ function App() {
 
     setDecade(trimmedDecade);
     setTranscript(decadeAnswer.transcript);
+    saveGameLogEntry({
+      context: "decade",
+      createdAt: new Date().toISOString(),
+      kind: "setup_transcript",
+      parsedValue: trimmedDecade,
+      transcript: decadeAnswer.transcript,
+    });
 
     const genreAnswer = await askUntilValid({
       language,
       onStatusChange: setSetupStatus,
       parseAnswer: parseTextAnswer,
+      signal,
       transcriptionContext: "genre",
       voiceLineKey: "ask_genre",
     });
@@ -59,28 +87,42 @@ function App() {
 
     setGenre(trimmedGenre);
     setTranscript(genreAnswer.transcript);
+    saveGameLogEntry({
+      context: "genre",
+      createdAt: new Date().toISOString(),
+      kind: "setup_transcript",
+      parsedValue: trimmedGenre,
+      transcript: genreAnswer.transcript,
+    });
     setSetupStatus("generating");
 
-    const gamePromise = generateSongs({
-      decade: trimmedDecade,
-      genre: trimmedGenre,
-      language,
-      players: playerCount,
-    }).then((response) => {
-      setGeneratedSongCount(response.count);
+    const gamePromise = generateSongs(
+      {
+        decade: trimmedDecade,
+        genre: trimmedGenre,
+        language,
+        players: playerCount,
+      },
+      signal,
+    ).then((response) => {
       setSetupStatus("preparing");
 
-      return prepareGame(response.count);
+      return prepareGame(response.count, signal);
     });
 
-    const [session] = await Promise.all([
-      gamePromise,
-      playVoiceLine(language, "explain_rules"),
-    ]);
+    setIsVoicePlaying(true);
+
+    const rulesVoicePromise = playVoiceLine(
+      language,
+      "explain_rules",
+      signal,
+    ).finally(() => setIsVoicePlaying(false));
+
+    const [session] = await Promise.all([gamePromise, rulesVoicePromise]);
 
     setGameSessionId(session.id);
 
-    const roundResult = await startRound();
+    const roundResult = await startRound(signal);
     const startedRound = roundResult.session.currentRound;
     const roundVoice = roundResult.voice;
 
@@ -90,18 +132,23 @@ function App() {
 
     setSetupStatus("speaking");
 
-    await playVoiceInstruction(language, roundVoice);
+    await playVoiceInstruction(language, roundVoice, signal);
 
     setCurrentRound(startedRound);
   }
 
   async function handleStart() {
+    const setupController = new AbortController();
+    setupAbortControllerRef.current?.abort();
+    setupAbortControllerRef.current = setupController;
+    setIsSetupActive(true);
+    setIsSetupPaused(false);
+    resumeVoicePlayback();
     setDecade(null);
     setPlayers(null);
     setStartError(null);
     setTranscript(null);
     setGenre(null);
-    setGeneratedSongCount(null);
     setGameSessionId(null);
     setCurrentRound(null);
 
@@ -110,6 +157,7 @@ function App() {
         language,
         onStatusChange: setSetupStatus,
         parseAnswer: parsePlayerCount,
+        signal: setupController.signal,
         transcriptionContext: "player_count",
         voiceLineKey: "welcome_player_count",
       });
@@ -118,8 +166,23 @@ function App() {
 
       setTranscript(playerAnswer.transcript);
       setPlayers(parsedPlayers);
-      await setupGame(parsedPlayers, "ask_decade");
+      saveGameLogEntry({
+        context: "player_count",
+        createdAt: new Date().toISOString(),
+        kind: "setup_transcript",
+        parsedValue: parsedPlayers,
+        transcript: playerAnswer.transcript,
+      });
+      await setupGame(
+        parsedPlayers,
+        "ask_decade",
+        setupController.signal,
+      );
     } catch (error) {
+      if (isSetupCancelled(error)) {
+        return;
+      }
+
       console.error(error);
 
       setStartError(
@@ -128,24 +191,44 @@ function App() {
           : "An error occurred while preparing the game.",
       );
     } finally {
+      if (setupAbortControllerRef.current === setupController) {
+        setupAbortControllerRef.current = null;
+      }
+
+      setIsSetupActive(false);
+      setIsSetupPaused(false);
       setSetupStatus("idle");
+      resumeVoicePlayback();
     }
   }
 
   async function handleReplay(setup: ReplaySetup) {
+    const setupController = new AbortController();
+    setupAbortControllerRef.current?.abort();
+    setupAbortControllerRef.current = setupController;
+    setIsSetupActive(true);
+    setIsSetupPaused(false);
+    resumeVoicePlayback();
     setCurrentRound(null);
     setDecade(null);
     setGenre(null);
     setTranscript(null);
     setStartError(null);
-    setGeneratedSongCount(null);
     setGameSessionId(null);
 
     setLanguage(setup.language);
     setPlayers(setup.players);
     try {
-      await setupGame(setup.players, "restart_ask_decade");
+      await setupGame(
+        setup.players,
+        "restart_ask_decade",
+        setupController.signal,
+      );
     } catch (error) {
+      if (isSetupCancelled(error)) {
+        return;
+      }
+
       console.error(error);
 
       setStartError(
@@ -154,24 +237,61 @@ function App() {
           : "An error occurred while preparing the new game.",
       );
     } finally {
+      if (setupAbortControllerRef.current === setupController) {
+        setupAbortControllerRef.current = null;
+      }
+
+      setIsSetupActive(false);
+      setIsSetupPaused(false);
       setSetupStatus("idle");
+      resumeVoicePlayback();
     }
   }
 
+  function handleSetupCommand(command: GameCommand): void {
+    if (command === "pause") {
+      pauseVoicePlayback();
+      setIsSetupPaused(true);
+      return;
+    }
+
+    if (command === "resume") {
+      resumeVoicePlayback();
+      setIsSetupPaused(false);
+      return;
+    }
+
+    setupAbortControllerRef.current?.abort();
+
+    if (gameSessionId !== null) {
+      void sendGameCommand("end").catch((error: unknown) =>
+        console.error(error),
+      );
+    }
+
+    handleGameEnd();
+  }
+
   function handleGameEnd(): void {
+    setupAbortControllerRef.current?.abort();
+    setupAbortControllerRef.current = null;
+    resumeVoicePlayback();
     setCurrentRound(null);
     setPlayers(null);
     setDecade(null);
     setGenre(null);
     setTranscript(null);
-    setGeneratedSongCount(null);
     setGameSessionId(null);
     setStartError(null);
     setSetupStatus("idle");
+    setIsSetupActive(false);
+    setIsSetupPaused(false);
+    setIsVoicePlaying(false);
   }
 
-  if (currentRound !== null) {
-    return (
+  return (
+    <AppLayout language={language}>
+      {currentRound !== null ? (
       <Gameplay
         currentRound={currentRound}
         language={language}
@@ -179,23 +299,24 @@ function App() {
         onReplay={handleReplay}
         onRoundChange={setCurrentRound}
       />
-    );
-  }
-
-  return (
-    <GameSetup
-      errorMessage={startError}
-      language={language}
-      onLanguageChange={setLanguage}
-      onStart={handleStart}
-      setupStatus={setupStatus}
+      ) : (
+        <GameSetup
+          errorMessage={startError}
+          isPaused={isSetupPaused}
+          isSetupActive={isSetupActive}
+          isVoicePlaying={isVoicePlaying}
+          language={language}
+          onCommand={handleSetupCommand}
+          onLanguageChange={setLanguage}
+          onStart={handleStart}
+          setupStatus={setupStatus}
       transcript={transcript}
       players={players}
       decade={decade}
       genre={genre}
-      generatedSongCount={generatedSongCount}
-      gameSessionId={gameSessionId}
     />
+      )}
+    </AppLayout>
   );
 }
 

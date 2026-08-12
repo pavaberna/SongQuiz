@@ -1,3 +1,19 @@
 @import "tailwindcss";
 @import "./styles/theme.css";
 @import "./styles/global.css";
+
+.song-ring-spin {
+  animation-name: song-ring-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes song-ring-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

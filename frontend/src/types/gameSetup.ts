@@ -1,4 +1,5 @@
 import type { GameLanguage } from "./language";
+import type { GameCommand } from "./gameCommand";
 import type { TranscriptionContext } from "./speech";
 import type { StaticVoiceLineKey } from "./voice";
 
@@ -12,7 +13,11 @@ export type GameSetupStatus =
 
 export type GameSetupProps = {
   errorMessage: string | null;
+  isPaused: boolean;
+  isSetupActive: boolean;
   language: GameLanguage;
+  isVoicePlaying: boolean;
+  onCommand: (command: GameCommand) => void;
   onLanguageChange: (language: GameLanguage) => void;
   onStart: () => void;
   setupStatus: GameSetupStatus;
@@ -20,13 +25,12 @@ export type GameSetupProps = {
   players: number | null;
   decade: string | null;
   genre: string | null;
-  generatedSongCount: number | null;
-  gameSessionId: string | null;
 };
 
 export type AskAndTranscribeOptions = {
   language: GameLanguage;
   onStatusChange: (status: GameSetupStatus) => void;
+  signal?: AbortSignal;
   voiceLineKey: StaticVoiceLineKey;
   transcriptionContext: TranscriptionContext;
 };

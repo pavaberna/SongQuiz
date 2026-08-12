@@ -4,6 +4,7 @@ import { API_BASE_URL } from "./apiConfig";
 
 export async function generateSongs(
   request: GenerateSongRequest,
+  signal?: AbortSignal,
 ): Promise<GenerateSongResponse> {
   const url = new URL("/api/dev/gemini-songs", API_BASE_URL);
 
@@ -13,6 +14,7 @@ export async function generateSongs(
       "Content-Type": "application/json",
     },
     method: "POST",
+    signal,
   });
 
   if (!response.ok) {
