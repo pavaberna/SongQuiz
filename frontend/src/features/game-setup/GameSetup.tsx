@@ -76,12 +76,19 @@ export function GameSetup({
   const currentStatusText = statusTextBySetupStatus[setupStatus];
   const isSpeaking = setupStatus === "speaking" || isVoicePlaying;
   const isListening = setupStatus === "recording";
+  const hasSetupStarted =
+    isSetupActive ||
+    players !== null ||
+    decade !== null ||
+    genre !== null ||
+    errorMessage !== null;
+  const isInitialScreen = !hasSetupStarted;
 
   return (
     <main className="song-screen flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-5 text-white sm:px-8 sm:py-6">
       <AppHeader
         centerContent={
-          isSetupActive ? (
+          hasSetupStarted ? (
             <GameControls
               isPaused={isPaused}
               labels={{
@@ -93,8 +100,8 @@ export function GameSetup({
             />
           ) : undefined
         }
-        isLanguageLocked={isSetupActive}
-        isSettingsLocked={isSetupActive}
+        isLanguageLocked={hasSetupStarted}
+        isSettingsLocked={hasSetupStarted}
         language={language}
         onLanguageChange={onLanguageChange}
         onSettingsChange={onSettingsChange}
@@ -102,7 +109,7 @@ export function GameSetup({
       />
 
       <section className="song-fade-in relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-9 py-10 text-center">
-        {!isSetupActive && (
+        {isInitialScreen && (
           <div className="space-y-4">
             <h1 className="text-5xl font-black tracking-tight text-white drop-shadow-[0_0_30px_rgba(217,70,239,0.35)] sm:text-7xl">
               {text.title}
@@ -120,7 +127,7 @@ export function GameSetup({
             isPaused={isPaused}
             label={text.recordingStatus}
           />
-        ) : !isSetupActive ? (
+        ) : isInitialScreen ? (
           <StartGameButton
             disabled={isBusy}
             label={text.startButton}

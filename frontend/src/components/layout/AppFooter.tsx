@@ -13,7 +13,7 @@ export function AppFooter({ language }: AppFooterProps) {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="relative z-20 flex min-h-12 items-center justify-center border-t border-neutral-900 bg-black/80 px-4 py-3 text-center text-xs text-neutral-500 backdrop-blur">
+    <footer className="song-app-footer relative z-20 mt-auto flex min-h-12 shrink-0 items-center justify-center border-t border-neutral-900 bg-black/80 px-4 pt-3 text-center text-xs text-neutral-500 backdrop-blur">
       <p>
         © {currentYear} Song Quiz · {createdByText[language]}: Mónok-Páva
         Bernadett

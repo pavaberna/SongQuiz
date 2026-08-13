@@ -10,8 +10,8 @@ type AppLayoutProps = {
 
 export function AppLayout({ children, language }: AppLayoutProps) {
   return (
-    <div className="song-app-background flex min-h-dvh flex-col">
-      <div className="relative z-10 flex flex-1">{children}</div>
+    <div className="song-app-background song-app-shell flex w-full min-w-0 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1">{children}</div>
       <AppFooter language={language} />
     </div>
   );

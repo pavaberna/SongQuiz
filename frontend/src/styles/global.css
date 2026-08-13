@@ -20,6 +20,17 @@ textarea {
 
 #root {
   min-height: 100vh;
+  min-width: 0;
+}
+
+.song-app-shell {
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+}
+
+.song-app-footer {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
 .song-screen {

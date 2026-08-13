@@ -33,7 +33,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="song-app-background flex min-h-dvh flex-col text-white">
+    <div className="song-app-background song-app-shell flex w-full min-w-0 flex-col text-white">
       <main className="relative z-10 flex flex-1 items-center justify-center px-5 py-12">
         <section className="song-fade-in flex w-full max-w-md flex-col items-center gap-7 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-fuchsia-400/40 bg-black shadow-[0_0_30px_rgba(217,70,239,0.4)]">

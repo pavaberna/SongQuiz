@@ -14,7 +14,10 @@ import {
 } from "./api/voiceApi";
 import { startRound } from "./api/gameApi";
 import type { GameRound } from "./types/game";
-import type { GameSetupStatus } from "./types/gameSetup";
+import type {
+  GameSetupErrorStage,
+  GameSetupStatus,
+} from "./types/gameSetup";
 import type { GameLanguage } from "./types/language";
 import { Gameplay } from "./features/gameplay/Gameplay";
 import type { StaticVoiceLineKey } from "./types/voice";
@@ -32,6 +35,71 @@ function isSetupCancelled(error: unknown): boolean {
     (error.name === "AbortError" ||
       error.message === "Audio recording was cancelled.")
   );
+}
+
+class GameSetupError extends Error {
+  stage: GameSetupErrorStage;
+
+  constructor(stage: GameSetupErrorStage, cause: unknown) {
+    super(cause instanceof Error ? cause.message : "Unknown error.");
+    this.name = "GameSetupError";
+    this.stage = stage;
+  }
+}
+
+async function runSetupStep<T>(
+  stage: GameSetupErrorStage,
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isSetupCancelled(error)) {
+      throw error;
+    }
+
+    throw new GameSetupError(stage, error);
+  }
+}
+
+const setupErrorLabels: Record<
+  GameLanguage,
+  Record<GameSetupErrorStage, string>
+> = {
+  hu: {
+    decade: "Az évtized bekérése nem sikerült.",
+    first_round: "Az első kör elindítása nem sikerült.",
+    game_preparation: "A játszható dalok előkészítése nem sikerült.",
+    genre: "A műfaj bekérése nem sikerült.",
+    player_count: "A játékosok számának bekérése nem sikerült.",
+    preparation_voice: "Az előkészítő szöveg lejátszása nem sikerült.",
+    round_voice: "Az első kör bemondása nem sikerült.",
+    song_generation: "A dalok összeállítása nem sikerült.",
+  },
+  en: {
+    decade: "Getting the decade failed.",
+    first_round: "Starting the first round failed.",
+    game_preparation: "Preparing playable songs failed.",
+    genre: "Getting the genre failed.",
+    player_count: "Getting the player count failed.",
+    preparation_voice: "Playing the preparation message failed.",
+    round_voice: "Announcing the first round failed.",
+    song_generation: "Generating the song list failed.",
+  },
+};
+
+function getSetupErrorMessage(
+  error: unknown,
+  language: GameLanguage,
+): string {
+  if (!(error instanceof GameSetupError)) {
+    return language === "hu" ? "Ismeretlen hiba történt." : "Unknown error.";
+  }
+
+  const label = setupErrorLabels[language][error.stage];
+  const detailLabel = language === "hu" ? "Részletek" : "Details";
+
+  return `${label} ${detailLabel}: ${error.message}`;
 }
 
 function App() {
@@ -55,28 +123,32 @@ function App() {
     decadeVoiceLineKey: StaticVoiceLineKey,
     signal: AbortSignal,
   ) {
-    const decadeAnswer = await askUntilValid({
-      language,
-      onStatusChange: setSetupStatus,
-      parseAnswer: parseMusicPeriod,
-      signal,
-      transcriptionContext: "decade",
-      voiceLineKey: decadeVoiceLineKey,
-    });
+    const decadeAnswer = await runSetupStep("decade", () =>
+      askUntilValid({
+        language,
+        onStatusChange: setSetupStatus,
+        parseAnswer: parseMusicPeriod,
+        signal,
+        transcriptionContext: "decade",
+        voiceLineKey: decadeVoiceLineKey,
+      }),
+    );
 
     const trimmedDecade = decadeAnswer.value;
 
     setDecade(trimmedDecade);
     setTranscript(decadeAnswer.transcript);
 
-    const genreAnswer = await askUntilValid({
-      language,
-      onStatusChange: setSetupStatus,
-      parseAnswer: parseTextAnswer,
-      signal,
-      transcriptionContext: "genre",
-      voiceLineKey: "ask_genre",
-    });
+    const genreAnswer = await runSetupStep("genre", () =>
+      askUntilValid({
+        language,
+        onStatusChange: setSetupStatus,
+        parseAnswer: parseTextAnswer,
+        signal,
+        transcriptionContext: "genre",
+        voiceLineKey: "ask_genre",
+      }),
+    );
 
     const trimmedGenre = genreAnswer.value;
 
@@ -84,20 +156,24 @@ function App() {
     setTranscript(genreAnswer.transcript);
     setSetupStatus("generating");
 
-    const gamePromise = generateSongs(
-      {
-        decade: trimmedDecade,
-        genre: trimmedGenre,
-        hungarianSongMode: settings.hungarianSongMode,
-        language,
-        players: playerCount,
-        songsPerPlayer: settings.songsPerPlayer,
-      },
-      signal,
+    const gamePromise = runSetupStep("song_generation", () =>
+      generateSongs(
+        {
+          decade: trimmedDecade,
+          genre: trimmedGenre,
+          hungarianSongMode: settings.hungarianSongMode,
+          language,
+          players: playerCount,
+          songsPerPlayer: settings.songsPerPlayer,
+        },
+        signal,
+      ),
     ).then((response) => {
       setSetupStatus("preparing");
 
-      return prepareGame(response.count, signal);
+      return runSetupStep("game_preparation", () =>
+        prepareGame(response.count, signal),
+      );
     });
 
     const preparationVoiceLineKey: StaticVoiceLineKey = settings.playRules
@@ -106,27 +182,32 @@ function App() {
 
     setIsVoicePlaying(true);
 
-    const preparationVoicePromise = playVoiceLine(
-      language,
-      preparationVoiceLineKey,
-      signal,
+    const preparationVoicePromise = runSetupStep("preparation_voice", () =>
+      playVoiceLine(language, preparationVoiceLineKey, signal),
     ).finally(() => setIsVoicePlaying(false));
 
     const [session] = await Promise.all([gamePromise, preparationVoicePromise]);
 
     setGameSessionId(session.id);
 
-    const roundResult = await startRound(signal);
+    const roundResult = await runSetupStep("first_round", () =>
+      startRound(signal),
+    );
     const startedRound = roundResult.session.currentRound;
     const roundVoice = roundResult.voice;
 
     if (startedRound === null || roundVoice === null) {
-      throw new Error("The first round could not be started.");
+      throw new GameSetupError(
+        "first_round",
+        new Error("The first round response did not contain a playable round."),
+      );
     }
 
     setSetupStatus("speaking");
 
-    await playVoiceInstruction(language, roundVoice, signal);
+    await runSetupStep("round_voice", () =>
+      playVoiceInstruction(language, roundVoice, signal),
+    );
 
     setCurrentRound(startedRound);
   }
@@ -147,14 +228,16 @@ function App() {
     setCurrentRound(null);
 
     try {
-      const playerAnswer = await askUntilValid({
-        language,
-        onStatusChange: setSetupStatus,
-        parseAnswer: parsePlayerCount,
-        signal: setupController.signal,
-        transcriptionContext: "player_count",
-        voiceLineKey: "welcome_player_count",
-      });
+      const playerAnswer = await runSetupStep("player_count", () =>
+        askUntilValid({
+          language,
+          onStatusChange: setSetupStatus,
+          parseAnswer: parsePlayerCount,
+          signal: setupController.signal,
+          transcriptionContext: "player_count",
+          voiceLineKey: "welcome_player_count",
+        }),
+      );
 
       const parsedPlayers = playerAnswer.value;
 
@@ -172,11 +255,7 @@ function App() {
 
       console.error(error);
 
-      setStartError(
-        language === "hu"
-          ? "Hiba történt a játék előkészítése közben"
-          : "An error occurred while preparing the game.",
-      );
+      setStartError(getSetupErrorMessage(error, language));
     } finally {
       if (setupAbortControllerRef.current === setupController) {
         setupAbortControllerRef.current = null;
@@ -218,11 +297,7 @@ function App() {
 
       console.error(error);
 
-      setStartError(
-        setup.language === "hu"
-          ? "Hiba történt az új játék előkészítése közben"
-          : "An error occurred while preparing the new game.",
-      );
+      setStartError(getSetupErrorMessage(error, setup.language));
     } finally {
       if (setupAbortControllerRef.current === setupController) {
         setupAbortControllerRef.current = null;

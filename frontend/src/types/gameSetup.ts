@@ -11,6 +11,16 @@ export type GameSetupStatus =
   | "generating"
   | "preparing";
 
+export type GameSetupErrorStage =
+  | "player_count"
+  | "decade"
+  | "genre"
+  | "song_generation"
+  | "game_preparation"
+  | "preparation_voice"
+  | "first_round"
+  | "round_voice";
+
 export type GameSetupProps = {
   errorMessage: string | null;
   isPaused: boolean;
