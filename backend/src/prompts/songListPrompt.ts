@@ -14,6 +14,16 @@ type BuildSongListPromptParams = GenerateSongListParams & {
 function buildGenreRules(params: BuildSongListPromptParams): string {
   const requestedGenres = params.requestedGenres.join(", ");
 
+  if (params.requestedGenres.length === 0) {
+    return `
+Genre variety rules:
+- No specific genre was requested.
+- Select a varied mix of genuinely different genres from the requested decade.
+- Include pop, rock, hip-hop, electronic, alternative, and other culturally relevant styles where they existed in that period.
+- Do not let a single genre dominate the list.
+- Every song's genres array must contain its accurate genres.`;
+  }
+
   if (params.requestedGenres.length === 1) {
     return `
 Genre rules:
@@ -37,7 +47,7 @@ function buildSongOriginRules(params: BuildSongListPromptParams): string {
     return `
 1. Hungarian music:
    - Every song must be Hungarian.
-   - Include Hungarian artists representing the selected decade and genre.
+   - Include Hungarian artists representing the selected decade and requested genre mix.
    - Choose mainstream radio hits or well-known local tracks with a solid following in Hungary.
 
 2. International music:
@@ -58,7 +68,7 @@ function buildSongOriginRules(params: BuildSongListPromptParams): string {
   return `
 1. Hungarian music integration:
    - Include exactly ${params.hungarianSongCount} Hungarian songs.
-   - Include Hungarian artists representing the selected decade and genre.
+   - Include Hungarian artists representing the selected decade and requested genre mix.
    - These can be mainstream radio hits or solid mid-tier, indie, or hip-hop tracks that have at least a solid local following in Hungary.
 
 2. International and European music:
@@ -68,6 +78,10 @@ function buildSongOriginRules(params: BuildSongListPromptParams): string {
 }
 
 export function buildSongListPrompt(params: BuildSongListPromptParams): string {
+  const requestedGenresText =
+    params.requestedGenres.length === 0
+      ? "Any genre (random mix)"
+      : params.requestedGenres.join(", ");
   const excludedSongsText =
     params.excludedSongs.length === 0
       ? "- No songs are excluded from this request."
@@ -80,7 +94,7 @@ You are an expert music curator for a song quiz app played specifically by Hunga
 
 Create exactly ${params.generatedSongCount} real, existing songs matching this setup:
 - Decade: ${params.decade}
-- Requested genres: ${params.requestedGenres.join(", ")}
+- Requested genres: ${requestedGenresText}
 - Curation focus: ${params.curationFocus}
 - Variation ID: ${params.variationId}
 
@@ -118,7 +132,7 @@ ${excludedSongsText}
 General rules:
 - Return exactly ${params.generatedSongCount} items.
 - Do not include duplicate songs.
-- Do not repeatedly default to the most obvious artist or song for this decade and genre.
+- Do not repeatedly default to the most obvious artist or song for this setup.
 - Vary artists: avoid using the same artist more than once unless the requested pool would otherwise be too small.
 - Use real, existing songs only.
 - The year must match the requested decade.

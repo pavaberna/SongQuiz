@@ -1,4 +1,25 @@
 const genreSeparators = [",", ";", " es ", " és ", " and ", " + "];
+const anyGenreWords = new Set([
+  "akarmi",
+  "akármi",
+  "all",
+  "any",
+  "anything",
+  "barmi",
+  "barmilyen",
+  "bármi",
+  "bármilyen",
+  "everything",
+  "mindegy",
+  "minden",
+  "mindenfele",
+  "mindenféle",
+  "mixed",
+  "osszes",
+  "összes",
+  "random",
+  "vegyes",
+]);
 
 function normalizeGenre(genre: string): string {
   return genre
@@ -12,7 +33,27 @@ function normalizeGenre(genre: string): string {
     .replaceAll(" ", "");
 }
 
+export function isAnyGenreRequest(genreInput: string): boolean {
+  const normalizedInput = genreInput
+    .trim()
+    .toLocaleLowerCase("hu-HU")
+    .replaceAll(".", " ")
+    .replaceAll(",", " ")
+    .replaceAll(";", " ")
+    .replaceAll("!", " ")
+    .replaceAll("?", " ")
+    .replaceAll("-", " ")
+    .replaceAll("_", " ");
+  const words = normalizedInput.split(" ").filter(Boolean);
+
+  return words.some((word) => anyGenreWords.has(word));
+}
+
 export function getRequestedGenres(genreInput: string): string[] {
+  if (isAnyGenreRequest(genreInput)) {
+    return [];
+  }
+
   let separatedGenres = ` ${genreInput.trim().toLocaleLowerCase("hu-HU")} `;
 
   for (const separator of genreSeparators) {

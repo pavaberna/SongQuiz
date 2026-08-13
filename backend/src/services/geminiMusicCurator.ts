@@ -71,10 +71,6 @@ export async function generateSongList(
   const targetSongCount = params.players * params.songsPerPlayer;
   const requestedGenres = getRequestedGenres(params.genre);
 
-  if (requestedGenres.length === 0) {
-    throw new Error("At least one genre is required.");
-  }
-
   const generatedSongCount = Math.ceil(
     targetSongCount * SONG_GENERATION_BUFFER_MULTIPLIER,
   );
