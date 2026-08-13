@@ -11,6 +11,7 @@ import {
   playVoiceInstruction,
   playVoiceLine,
   resumeVoicePlayback,
+  stopVoicePlayback,
 } from "./api/voiceApi";
 import { startRound } from "./api/gameApi";
 import type { GameRound } from "./types/game";
@@ -115,9 +116,31 @@ function App() {
   const [players, setPlayers] = useState<number | null>(null);
   const [decade, setDecade] = useState<string | null>(null);
   const [genre, setGenre] = useState<string | null>(null);
-  const [gameSessionId, setGameSessionId] = useState<string | null>(null);
   const [currentRound, setCurrentRound] = useState<GameRound | null>(null);
   const setupAbortControllerRef = useRef<AbortController | null>(null);
+
+  async function handleSetupFailure(
+    error: unknown,
+    errorLanguage: GameLanguage,
+  ): Promise<void> {
+    setupAbortControllerRef.current?.abort();
+    stopVoicePlayback();
+
+    try {
+      await sendGameCommand("end");
+    } catch (cleanupError) {
+      console.error("Failed to delete the current game after an error.", cleanupError);
+    }
+
+    setCurrentRound(null);
+    setPlayers(null);
+    setDecade(null);
+    setGenre(null);
+    setTranscript(null);
+    setIsSetupPaused(false);
+    setIsVoicePlaying(false);
+    setStartError(getSetupErrorMessage(error, errorLanguage));
+  }
 
   async function setupGame(
     playerCount: number,
@@ -187,9 +210,7 @@ function App() {
       playVoiceLine(language, preparationVoiceLineKey, signal),
     ).finally(() => setIsVoicePlaying(false));
 
-    const [session] = await Promise.all([gamePromise, preparationVoicePromise]);
-
-    setGameSessionId(session.id);
+    await Promise.all([gamePromise, preparationVoicePromise]);
 
     const roundResult = await runSetupStep("first_round", () =>
       startRound(signal),
@@ -227,7 +248,6 @@ function App() {
     setStartError(null);
     setTranscript(null);
     setGenre(null);
-    setGameSessionId(null);
     setCurrentRound(null);
 
     try {
@@ -258,7 +278,7 @@ function App() {
 
       console.error(error);
 
-      setStartError(getSetupErrorMessage(error, language));
+      await handleSetupFailure(error, language);
     } finally {
       if (setupAbortControllerRef.current === setupController) {
         setupAbortControllerRef.current = null;
@@ -283,7 +303,6 @@ function App() {
     setGenre(null);
     setTranscript(null);
     setStartError(null);
-    setGameSessionId(null);
 
     setLanguage(setup.language);
     setPlayers(setup.players);
@@ -300,7 +319,7 @@ function App() {
 
       console.error(error);
 
-      setStartError(getSetupErrorMessage(error, setup.language));
+      await handleSetupFailure(error, setup.language);
     } finally {
       if (setupAbortControllerRef.current === setupController) {
         setupAbortControllerRef.current = null;
@@ -327,12 +346,11 @@ function App() {
     }
 
     setupAbortControllerRef.current?.abort();
+    stopVoicePlayback();
 
-    if (gameSessionId !== null) {
-      void sendGameCommand("end").catch((error: unknown) =>
-        console.error(error),
-      );
-    }
+    void sendGameCommand("end").catch((error: unknown) =>
+      console.error(error),
+    );
 
     handleGameEnd();
   }
@@ -340,13 +358,12 @@ function App() {
   function handleGameEnd(): void {
     setupAbortControllerRef.current?.abort();
     setupAbortControllerRef.current = null;
-    resumeVoicePlayback();
+    stopVoicePlayback();
     setCurrentRound(null);
     setPlayers(null);
     setDecade(null);
     setGenre(null);
     setTranscript(null);
-    setGameSessionId(null);
     setStartError(null);
     setSetupStatus("idle");
     setIsSetupActive(false);

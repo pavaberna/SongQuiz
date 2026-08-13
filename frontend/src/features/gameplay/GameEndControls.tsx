@@ -22,21 +22,21 @@ export function GameEndControls({
       <Button
         disabled={disabled}
         onClick={onEnd}
-        size="icon"
         title={stopLabel}
         variant="ghost"
       >
         <Square size={20} />
+        <span>{stopLabel}</span>
       </Button>
 
       <Button
         disabled={disabled}
         onClick={onNewGame}
-        size="icon"
         title={newGameLabel}
         variant="secondary"
       >
         <RotateCcw size={20} />
+        <span>{newGameLabel}</span>
       </Button>
     </div>
   );

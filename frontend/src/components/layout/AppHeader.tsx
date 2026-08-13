@@ -13,6 +13,7 @@ type AppHeaderProps = {
   isLanguageLocked?: boolean;
   isSettingsLocked?: boolean;
   language: GameLanguage;
+  onHome: () => void;
   onLanguageChange?: (language: GameLanguage) => void;
   onSettingsChange: (settings: GameSettings) => void;
   settings: GameSettings;
@@ -44,6 +45,7 @@ export function AppHeader({
   isLanguageLocked = false,
   isSettingsLocked = false,
   language,
+  onHome,
   onLanguageChange,
   onSettingsChange,
   settings,
@@ -53,6 +55,7 @@ export function AppHeader({
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const logoutLabel =
     language === "hu" ? "Kijelentkezés" : "Sign out";
+  const homeLabel = language === "hu" ? "Vissza a főoldalra" : "Back to home";
 
   async function handleLogout(): Promise<void> {
     setIsLoggingOut(true);
@@ -68,7 +71,13 @@ export function AppHeader({
 
   return (
     <header className="relative z-20 mx-auto grid w-full max-w-6xl grid-cols-2 items-center gap-4 md:grid-cols-[1fr_minmax(18rem,30rem)_1fr]">
-      <div className="flex items-center gap-3 justify-self-start">
+      <button
+        aria-label={homeLabel}
+        className="flex cursor-pointer items-center gap-3 justify-self-start"
+        onClick={onHome}
+        title={homeLabel}
+        type="button"
+      >
         <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-fuchsia-400/40 bg-black shadow-[0_0_22px_rgba(217,70,239,0.35)]">
           <Radio className="h-5 w-5 text-cyan-300" />
         </div>
@@ -76,7 +85,7 @@ export function AppHeader({
         <p className="bg-gradient-to-r from-fuchsia-300 via-purple-200 to-cyan-300 bg-clip-text text-sm font-black tracking-[0.1em] text-transparent sm:text-lg sm:tracking-[0.24em]">
           SONG QUIZ
         </p>
-      </div>
+      </button>
 
       {centerContent && (
         <div className="col-span-2 row-start-2 flex w-full justify-center md:col-span-1 md:col-start-2 md:row-start-1">

@@ -28,7 +28,7 @@ const textByLanguage = {
     setupTitle: "Felismert beállítások",
     pause: "Szünet",
     resume: "Folytatás",
-    stop: "Játék leállítása",
+    stop: "Stop",
   },
   en: {
     title: "SONG QUIZ",
@@ -80,15 +80,14 @@ export function GameSetup({
     isSetupActive ||
     players !== null ||
     decade !== null ||
-    genre !== null ||
-    errorMessage !== null;
-  const isInitialScreen = !hasSetupStarted;
+    genre !== null;
+  const isInitialScreen = !hasSetupStarted && errorMessage === null;
 
   return (
     <main className="song-screen flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-5 text-white sm:px-8 sm:py-6">
       <AppHeader
         centerContent={
-          hasSetupStarted ? (
+          hasSetupStarted && errorMessage === null ? (
             <GameControls
               isPaused={isPaused}
               labels={{
@@ -103,6 +102,7 @@ export function GameSetup({
         isLanguageLocked={hasSetupStarted}
         isSettingsLocked={hasSetupStarted}
         language={language}
+        onHome={() => onCommand("end")}
         onLanguageChange={onLanguageChange}
         onSettingsChange={onSettingsChange}
         settings={settings}

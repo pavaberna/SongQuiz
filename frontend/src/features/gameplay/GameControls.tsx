@@ -16,21 +16,21 @@ export function GameControls({
       <Button
         disabled={disabled}
         onClick={() => onCommand(isPaused ? "resume" : "pause")}
-        size="icon"
         title={pauseLabel}
         variant="secondary"
       >
         {isPaused ? <Play size={20} /> : <Pause size={20} />}
+        <span>{pauseLabel}</span>
       </Button>
 
       <Button
         disabled={disabled}
         onClick={() => onCommand("end")}
-        size="icon"
         title={labels.stop}
         variant="ghost"
       >
         <Square size={20} />
+        <span>{labels.stop}</span>
       </Button>
     </div>
   );

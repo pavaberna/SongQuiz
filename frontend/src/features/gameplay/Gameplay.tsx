@@ -3,7 +3,11 @@ import { SongPlayer } from "./SongPlayer";
 import type { SubmitAudioAnswerResponse } from "../../types/answer";
 import type { GameplayPhase, GameplayProps } from "../../types/gameplay";
 import { recordAndSubmitAnswer } from "./recordAndSubmitAnswer";
-import { playVoiceInstruction, playVoiceLine } from "../../api/voiceApi";
+import {
+  playVoiceInstruction,
+  playVoiceLine,
+  stopVoicePlayback,
+} from "../../api/voiceApi";
 import { getGameSummary, startRound } from "../../api/gameApi";
 import type { GameSummary } from "../../types/gameSummary";
 import { sendGameCommand } from "../../api/gameCommandApi";
@@ -32,8 +36,8 @@ const textByLanguage = {
     winners: "Nyertes játékosok",
     pause: "Szünet",
     resume: "Folytatás",
-    stop: "Játék leállítása",
-    newGame: "Új játék",
+    stop: "Stop",
+    newGame: "Újra",
     position: "Helyezés",
     pointUnit: "pont",
     score: "Pontszám",
@@ -54,7 +58,7 @@ const textByLanguage = {
     pause: "Pause",
     resume: "Resume",
     stop: "End game",
-    newGame: "New game",
+    newGame: "Restart",
     position: "Place",
     pointUnit: "points",
     score: "Score",
@@ -101,6 +105,43 @@ export function Gameplay({
   function cancelReplayDecision(): void {
     replayAbortControllerRef.current?.abort();
     replayAbortControllerRef.current = null;
+  }
+
+  function handleGameplayFailure(error: unknown): void {
+    const message =
+      error instanceof Error ? error.message : "Unknown gameplay error.";
+
+    cancelAnswerRecording();
+    cancelReplayDecision();
+    stopVoicePlayback();
+    setAnswerResponse(null);
+    setGameSummary(null);
+    setGameplayError(message);
+    setIsPaused(true);
+    setPhase("error");
+
+    void sendGameCommand("end").catch((cleanupError: unknown) =>
+      console.error(
+        "Failed to delete the current game after an error.",
+        cleanupError,
+      ),
+    );
+  }
+
+  async function handleHome(): Promise<void> {
+    cancelAnswerRecording();
+    cancelReplayDecision();
+    stopVoicePlayback();
+    setIsCommandPending(true);
+
+    try {
+      await sendGameCommand("end");
+    } catch (error) {
+      console.error("Failed to end the current game.", error);
+    } finally {
+      setIsCommandPending(false);
+      onGameEnd();
+    }
   }
 
   function isCancelledError(error: unknown): boolean {
@@ -155,13 +196,7 @@ export function Gameplay({
       onGameEnd();
     } catch (error) {
       setIsPaused(previousPausedState);
-
-      const message =
-        error instanceof Error
-          ? error.message
-          : "The game command could not be handled.";
-
-      setGameplayError(message);
+      handleGameplayFailure(error);
     } finally {
       setIsCommandPending(false);
     }
@@ -188,17 +223,7 @@ export function Gameplay({
         judgeResult: response.result.judgeResult,
       });
       setPhase("result");
-      try {
-        await playVoiceInstruction(language, response.voice);
-      } catch (voiceError) {
-        const message =
-          voiceError instanceof Error
-            ? voiceError.message
-            : "The answer voice could not be played.";
-
-        setGameplayError(message);
-        return;
-      }
+      await playVoiceInstruction(language, response.voice);
 
       if (response.result.session.status === "finished") {
         await showGameSummary();
@@ -211,11 +236,7 @@ export function Gameplay({
         return;
       }
 
-      const message =
-        error instanceof Error ? error.message : "Unknown gameplay error.";
-
-      setGameplayError(message);
-      setPhase("error");
+      handleGameplayFailure(error);
     }
   }
 
@@ -277,12 +298,7 @@ export function Gameplay({
       onGameEnd();
     } catch (error) {
       if (!isCancelledError(error)) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "The replay decision could not be handled.";
-
-        setGameplayError(message);
+        handleGameplayFailure(error);
       }
     } finally {
       if (replayAbortControllerRef.current === replayController) {
@@ -300,12 +316,7 @@ export function Gameplay({
       const setup = await startPlayAgain();
       await onReplay(setup);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "The new game could not be started.";
-
-      setGameplayError(message);
+      handleGameplayFailure(error);
     } finally {
       setIsCommandPending(false);
     }
@@ -315,7 +326,7 @@ export function Gameplay({
     <main className="song-screen flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 text-foreground sm:px-8 sm:py-6">
       <AppHeader
         centerContent={
-          phase === "finished" ? (
+          phase === "error" ? undefined : phase === "finished" ? (
             <GameEndControls
               disabled={isCommandPending}
               newGameLabel={text.newGame}
@@ -339,12 +350,13 @@ export function Gameplay({
         isLanguageLocked
         isSettingsLocked={phase !== "finished"}
         language={language}
+        onHome={() => void handleHome()}
         onSettingsChange={onSettingsChange}
         settings={settings}
       />
 
       <section className="song-fade-in flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-5 self-center py-6">
-        {phase !== "finished" && (
+        {phase !== "finished" && phase !== "error" && (
           <div className="flex w-full max-w-[480px] flex-col items-center gap-5">
             <div className="flex w-full items-center justify-between rounded-2xl border border-neutral-800 bg-neutral-950/75 px-5 py-3 shadow-[0_0_24px_rgba(217,70,239,0.14)] backdrop-blur">
               <p className="text-sm font-black uppercase tracking-[0.18em] text-cyan-300">
@@ -364,7 +376,7 @@ export function Gameplay({
                 isCovered={phase !== "result"}
                 isPaused={isPaused}
                 onComplete={handleClipComplete}
-                onError={(message) => setGameplayError(message)}
+                onError={(message) => handleGameplayFailure(new Error(message))}
                 startOffset={currentRound.startOffset}
                 youtubeId={youtubeId}
               />
@@ -414,8 +426,10 @@ export function Gameplay({
           </div>
         )}
 
-        {gameplayError !== null && (
-          <p className="text-center text-danger">{gameplayError}</p>
+        {phase === "error" && gameplayError !== null && (
+          <p className="w-full max-w-[480px] rounded-control border border-danger/40 bg-danger/10 px-5 py-4 text-center text-danger">
+            {gameplayError}
+          </p>
         )}
       </section>
     </main>

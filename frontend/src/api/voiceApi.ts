@@ -4,8 +4,30 @@ import { API_BASE_URL } from "./apiConfig";
 import type { ApiErrorResponse } from "../types/api";
 import { apiFetch } from "./apiFetch";
 
+let voiceAudio: HTMLAudioElement | null = null;
 let activeVoiceAudio: HTMLAudioElement | null = null;
+let cancelActiveVoicePlayback: (() => void) | null = null;
 let isVoicePlaybackPaused = false;
+
+function getVoiceAudio(): HTMLAudioElement {
+  if (voiceAudio === null) {
+    voiceAudio = new Audio();
+    voiceAudio.preload = "auto";
+  }
+
+  return voiceAudio;
+}
+
+function setVoiceSource(source: string, usesCredentials: boolean): HTMLAudioElement {
+  const audio = getVoiceAudio();
+
+  audio.pause();
+  audio.crossOrigin = usesCredentials ? "use-credentials" : null;
+  audio.src = source;
+  audio.load();
+
+  return audio;
+}
 
 export function pauseVoicePlayback(): void {
   isVoicePlaybackPaused = true;
@@ -18,6 +40,11 @@ export function resumeVoicePlayback(): void {
   if (activeVoiceAudio !== null) {
     void activeVoiceAudio.play().catch(() => undefined);
   }
+}
+
+export function stopVoicePlayback(): void {
+  isVoicePlaybackPaused = false;
+  cancelActiveVoicePlayback?.();
 }
 
 function playAudio(
@@ -35,6 +62,7 @@ function playAudio(
 
       if (activeVoiceAudio === audio) {
         activeVoiceAudio = null;
+        cancelActiveVoicePlayback = null;
       }
 
       onCleanup?.();
@@ -55,6 +83,8 @@ function playAudio(
       cleanup();
       reject(new DOMException("Voice playback was cancelled.", "AbortError"));
     }
+
+    cancelActiveVoicePlayback = handleAbort;
 
     audio.addEventListener("ended", handleEnded, { once: true });
     audio.addEventListener("error", handleError, { once: true });
@@ -86,9 +116,7 @@ export function playVoiceLine(
     language,
   }).toString();
 
-  const audio = new Audio();
-  audio.crossOrigin = "use-credentials";
-  audio.src = url.toString();
+  const audio = setVoiceSource(url.toString(), true);
 
   return playAudio(audio, signal);
 }
@@ -125,7 +153,7 @@ export async function playVoiceInstruction(
 
   const audioBlob = await response.blob();
   const audioUrl = URL.createObjectURL(audioBlob);
-  const audio = new Audio(audioUrl);
+  const audio = setVoiceSource(audioUrl, false);
 
   return playAudio(audio, signal, () => URL.revokeObjectURL(audioUrl));
 }
