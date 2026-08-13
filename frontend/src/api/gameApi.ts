@@ -5,6 +5,7 @@ import type {
 } from "../types/game";
 import type { GameSummaryResponse } from "../types/gameSummary";
 import { API_BASE_URL } from "./apiConfig";
+import { apiFetch } from "./apiFetch";
 
 export async function prepareGameSession(
   enrichmentLimit: number,
@@ -13,7 +14,7 @@ export async function prepareGameSession(
 ): Promise<PrepareGameSessionResponse> {
   const url = new URL("/api/dev/prepare-game-session", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     body: JSON.stringify({ enrichmentLimit, useCacheFallback }),
     headers: {
       "Content-Type": "application/json",
@@ -45,7 +46,7 @@ export async function prepareGameSession(
 export async function startRound(signal?: AbortSignal): Promise<StartRoundResponse> {
   const url = new URL("/api/dev/start-round", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "POST",
     signal,
   });
@@ -73,7 +74,7 @@ export async function startRound(signal?: AbortSignal): Promise<StartRoundRespon
 export async function getGameSummary(): Promise<GameSummaryResponse> {
   const url = new URL("/api/dev/game-summary", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "GET",
   });
 

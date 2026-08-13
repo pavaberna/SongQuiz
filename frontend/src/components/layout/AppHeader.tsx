@@ -1,11 +1,12 @@
-import { Radio } from "lucide-react";
-import type { ReactNode } from "react";
+import { LogOut, Radio } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import { SettingsMenu } from "../../features/settings/SettingsMenu";
 import type { GameLanguage } from "../../types/language";
 import type { GameSettings } from "../../types/settings";
 import { FlagIcon, type FlagCountry } from "../ui/FlagIcon";
 import { Select, type SelectOption } from "../ui/Select";
+import { useAuth } from "../../features/auth/authContext";
 
 type AppHeaderProps = {
   centerContent?: ReactNode;
@@ -48,6 +49,22 @@ export function AppHeader({
   settings,
 }: AppHeaderProps) {
   const selectedLanguage = languageDetails[language];
+  const { logout, user } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const logoutLabel =
+    language === "hu" ? "Kijelentkezés" : "Sign out";
+
+  async function handleLogout(): Promise<void> {
+    setIsLoggingOut(true);
+
+    try {
+      await logout();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
 
   return (
     <header className="relative z-20 mx-auto grid w-full max-w-6xl grid-cols-2 items-center gap-4 md:grid-cols-[1fr_minmax(18rem,30rem)_1fr]">
@@ -94,6 +111,17 @@ export function AppHeader({
           onChange={onSettingsChange}
           settings={settings}
         />
+
+        <button
+          aria-label={logoutLabel}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-neutral-800 bg-neutral-950/80 text-neutral-300 transition-colors hover:border-fuchsia-400/50 hover:text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={isSettingsLocked || isLoggingOut}
+          onClick={() => void handleLogout()}
+          title={`${logoutLabel}${user ? ` (${user.email})` : ""}`}
+          type="button"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
       </div>
     </header>
   );

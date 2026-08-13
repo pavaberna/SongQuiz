@@ -4,13 +4,14 @@ import type {
   GameCommandResponse,
 } from "../types/gameCommand";
 import { API_BASE_URL } from "./apiConfig";
+import { apiFetch } from "./apiFetch";
 
 export async function sendGameCommand(
   command: GameCommand,
 ): Promise<GameCommandResponse> {
   const url = new URL("/api/dev/game-command", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     body: JSON.stringify({ command }),
     headers: {
       "Content-Type": "application/json",

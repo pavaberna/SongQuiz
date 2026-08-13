@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { generateSongList } from "./services/geminiMusicCurator";
 import {
   readCurrentSongList,
@@ -62,12 +63,41 @@ import { transcriptionContexts } from "./types/speech";
 import type { TranscriptionContext } from "./types/speech";
 import type { HungarianSongMode } from "./types/song";
 import { shuffleSongs } from "./services/songDiversityService";
+import {
+  authenticateGoogleCredential,
+  createAuthSessionToken,
+  GoogleAccountNotAllowedError,
+} from "./services/authService";
+import {
+  AUTH_COOKIE_NAME,
+  getAuthCookieOptions,
+} from "./config/authConfig";
+import { requireAuth } from "./middleware/requireAuth";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const allowedFrontendOrigins = (
+  process.env.FRONTEND_ORIGIN ?? "http://localhost:5173"
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-app.use(cors());
+app.use(
+  cors({
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin || allowedFrontendOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("This origin is not allowed by CORS."));
+    },
+  }),
+);
 app.use(express.json());
+app.use(cookieParser());
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -79,6 +109,50 @@ const upload = multer({
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Backend is healthy" });
 });
+
+app.post("/api/auth/google", async (req, res) => {
+  try {
+    const credential =
+      typeof req.body.credential === "string" ? req.body.credential : "";
+
+    if (!credential) {
+      res.status(400).json({ error: "Google credential is required." });
+      return;
+    }
+
+    const user = await authenticateGoogleCredential(credential);
+    const sessionToken = createAuthSessionToken(user);
+
+    res.cookie(AUTH_COOKIE_NAME, sessionToken, getAuthCookieOptions());
+    res.json({ user });
+  } catch (error) {
+    if (error instanceof GoogleAccountNotAllowedError) {
+      res.status(403).json({ error: error.message });
+      return;
+    }
+
+    console.warn("Google authentication failed:", error);
+    res.status(401).json({ error: "Google authentication failed." });
+  }
+});
+
+app.get("/api/auth/me", requireAuth, (req, res) => {
+  res.json({ user: res.locals.authUser });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  const cookieOptions = getAuthCookieOptions();
+
+  res.clearCookie(AUTH_COOKIE_NAME, {
+    httpOnly: cookieOptions.httpOnly,
+    path: cookieOptions.path,
+    sameSite: cookieOptions.sameSite,
+    secure: cookieOptions.secure,
+  });
+  res.status(204).send();
+});
+
+app.use("/api/dev", requireAuth);
 
 app.post("/api/dev/gemini-songs", async (req, res) => {
   try {

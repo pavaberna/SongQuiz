@@ -2,6 +2,7 @@ import type { GameLanguage } from "../types/language";
 import type { StaticVoiceLineKey, VoiceInstruction } from "../types/voice";
 import { API_BASE_URL } from "./apiConfig";
 import type { ApiErrorResponse } from "../types/api";
+import { apiFetch } from "./apiFetch";
 
 let activeVoiceAudio: HTMLAudioElement | null = null;
 let isVoicePlaybackPaused = false;
@@ -85,7 +86,9 @@ export function playVoiceLine(
     language,
   }).toString();
 
-  const audio = new Audio(url.toString());
+  const audio = new Audio();
+  audio.crossOrigin = "use-credentials";
+  audio.src = url.toString();
 
   return playAudio(audio, signal);
 }
@@ -97,7 +100,7 @@ export async function playVoiceInstruction(
 ): Promise<void> {
   const url = new URL("/api/dev/voice-line-audio-preview", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     body: JSON.stringify({
       key: instruction.key,
       params: "params" in instruction ? instruction.params : undefined,

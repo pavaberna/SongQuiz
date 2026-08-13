@@ -1,6 +1,7 @@
 import type { SubmitAudioAnswerResponse } from "../types/answer";
 import type { ApiErrorResponse } from "../types/api";
 import { API_BASE_URL } from "./apiConfig";
+import { apiFetch } from "./apiFetch";
 
 export async function submitAudioAnswer(
   audio: Blob,
@@ -12,7 +13,7 @@ export async function submitAudioAnswer(
 
   const url = new URL("/api/dev/submit-audio-answer", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     body: formData,
     method: "POST",
     signal,
@@ -45,7 +46,7 @@ export async function submitSkippedAnswer(
   signal?: AbortSignal,
 ): Promise<SubmitAudioAnswerResponse> {
   const url = new URL("/api/dev/submit-answer", API_BASE_URL);
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     body: JSON.stringify({ answer: "pass" }),
     headers: {
       "Content-Type": "application/json",

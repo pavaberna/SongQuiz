@@ -1,6 +1,7 @@
 import type { ApiErrorResponse } from "../types/api";
 import type { ReplayDecisionResponse, ReplaySetup } from "../types/replay";
 import { API_BASE_URL } from "./apiConfig";
+import { apiFetch } from "./apiFetch";
 
 export async function submitReplayDecision(
   answer: string,
@@ -8,7 +9,7 @@ export async function submitReplayDecision(
 ): Promise<ReplayDecisionResponse> {
   const url = new URL("/api/dev/replay-decision", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     body: JSON.stringify({ answer }),
     method: "POST",
     headers: {
@@ -44,7 +45,7 @@ export async function submitReplayDecision(
 export async function startPlayAgain(): Promise<ReplaySetup> {
   const url = new URL("/api/dev/play-again", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "POST",
   });
 

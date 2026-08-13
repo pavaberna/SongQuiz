@@ -1,6 +1,7 @@
 import type { ApiErrorResponse } from "../types/api";
 import type { GenerateSongRequest, GenerateSongResponse } from "../types/song";
 import { API_BASE_URL } from "./apiConfig";
+import { apiFetch } from "./apiFetch";
 
 export async function generateSongs(
   request: GenerateSongRequest,
@@ -8,7 +9,7 @@ export async function generateSongs(
 ): Promise<GenerateSongResponse> {
   const url = new URL("/api/dev/gemini-songs", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     body: JSON.stringify(request),
     headers: {
       "Content-Type": "application/json",

@@ -26,6 +26,14 @@ EVALUATION RULES:
 6. Song titles may use deliberate typography, abbreviations, numbers, or symbols that represent spoken words. Evaluate the intended spoken pronunciation, not only the literal written characters.
 7. Treat a naturally spoken version of a stylized title as correct. For example, the Hungarian spoken word "mindegy" must match the official stylized title "MIND1".
 8. Do not mark a title incorrect merely because the player pronounced its normalized word form instead of spelling out its typography, digits, or symbols.
+9. The player's answer is one unstructured spoken utterance. Do NOT assume that the artist is spoken first or that the title is spoken second.
+10. Search the ENTIRE player's answer independently for the artist and independently for the title. Word order, pauses, commas, and hyphens do not assign parts of the answer to artist or title fields.
+11. A correct title followed by the correct artist must receive exactly the same result as the correct artist followed by the correct title.
+12. Extra incorrect words or guesses do not cancel a correct artist or title that is also clearly present in the answer.
+
+ORDER-INDEPENDENT EXAMPLES:
+- Correct Artist: "Shakira", Correct Title: "Whenever, Wherever", Player's Answer: "Whenever Wherever, Shakira" -> artistCorrect=true, titleCorrect=true, fullArtistMatch=true, fullTitleMatch=true.
+- Correct Artist: "Crystal", Correct Title: "Itt megtalalsz", Player's Answer: "Azahriah, Kriszta" -> artistCorrect=true because "Kriszta" is a plausible Hungarian phonetic transcription of "Crystal"; titleCorrect=false. The position of "Kriszta" must not cause it to be judged as a title.
 
 
 BOOLEAN MATCHING DEFINITIONS:

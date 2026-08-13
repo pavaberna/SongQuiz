@@ -4,6 +4,7 @@ import type {
   TranscriptionResponse,
 } from "../types/speech";
 import { API_BASE_URL } from "./apiConfig";
+import { apiFetch } from "./apiFetch";
 
 export async function transcribeAudio(
   audio: Blob,
@@ -17,7 +18,7 @@ export async function transcribeAudio(
 
   const url = new URL("/api/dev/transcribe-audio", API_BASE_URL);
 
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     body: formData,
     method: "POST",
     signal: options.signal,
