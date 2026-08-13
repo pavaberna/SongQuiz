@@ -14,6 +14,7 @@ export function GameControls({
   return (
     <div className="flex w-full max-w-[480px] items-center justify-center gap-3 rounded-2xl border border-neutral-800 bg-neutral-950/85 px-5 py-3 shadow-[0_0_24px_rgba(6,182,212,0.12)] backdrop-blur">
       <Button
+        className="min-w-0 flex-1"
         disabled={disabled}
         onClick={() => onCommand(isPaused ? "resume" : "pause")}
         title={pauseLabel}
@@ -24,6 +25,7 @@ export function GameControls({
       </Button>
 
       <Button
+        className="min-w-0 flex-1"
         disabled={disabled}
         onClick={() => onCommand("end")}
         title={labels.stop}

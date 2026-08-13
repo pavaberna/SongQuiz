@@ -1,5 +1,5 @@
 import YouTube, { type YouTubePlayer, type YouTubeProps } from "react-youtube";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SongPlayerProps } from "../../types/songPlayer";
 import { TimedProgressBar } from "../../components/ui/TimedProgressBar";
 import { PlayingCoverAnimation } from "./PlayingCoverAnimation";
@@ -24,6 +24,29 @@ export function SongPlayer({
   const [manualPlayRequired, setManualPlayRequired] = useState(false);
   const playbackKey = `${youtubeId}:${startOffset}`;
 
+  const startClip = useCallback(
+    (player: YouTubePlayer) => {
+      if (autoplayTimerRef.current !== null) {
+        window.clearTimeout(autoplayTimerRef.current);
+      }
+
+      setActivePlaybackKey(null);
+      setManualPlayRequired(false);
+
+      player.loadVideoById({
+        videoId: youtubeId,
+        startSeconds: startOffset,
+        endSeconds: startOffset + clipDuration,
+      });
+
+      autoplayTimerRef.current = window.setTimeout(() => {
+        autoplayTimerRef.current = null;
+        setManualPlayRequired(true);
+      }, AUTOPLAY_CHECK_DELAY_MS);
+    },
+    [clipDuration, startOffset, youtubeId],
+  );
+
   useEffect(() => {
     return () => {
       if (autoplayTimerRef.current !== null) {
@@ -47,30 +70,28 @@ export function SongPlayer({
     player.playVideo();
   }, [isPaused]);
 
+  useEffect(() => {
+    const player = playerRef.current;
+
+    if (player !== null) {
+      startClip(player);
+    }
+  }, [startClip]);
+
   const options: YouTubeProps["opts"] = {
     height: "100%",
     width: "100%",
     playerVars: {
-      autoplay: 1,
       controls: 0,
       disablekb: 1,
-      end: startOffset + clipDuration,
       origin: window.location.origin,
       playsinline: 1,
-      start: startOffset,
     },
   };
 
   const handleReady: YouTubeProps["onReady"] = (event) => {
     playerRef.current = event.target;
-    setManualPlayRequired(false);
-
-    autoplayTimerRef.current = window.setTimeout(() => {
-      autoplayTimerRef.current = null;
-      setManualPlayRequired(true);
-    }, AUTOPLAY_CHECK_DELAY_MS);
-
-    event.target.playVideo();
+    startClip(event.target);
   };
 
   const handlePlay: YouTubeProps["onPlay"] = () => {
@@ -88,8 +109,7 @@ export function SongPlayer({
     }
 
     try {
-      playerRef.current.seekTo(startOffset, true);
-      playerRef.current.playVideo();
+      startClip(playerRef.current);
     } catch {
       onError("The song could not be started.");
     }
@@ -119,7 +139,6 @@ export function SongPlayer({
           onEnd={handleEnd}
           onError={handleError}
           opts={options}
-          videoId={youtubeId}
         />
         {isCovered && manualPlayRequired && (
           <button
