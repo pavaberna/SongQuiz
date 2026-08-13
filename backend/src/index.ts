@@ -72,7 +72,10 @@ import {
   AUTH_COOKIE_NAME,
   getAuthCookieOptions,
 } from "./config/authConfig";
-import { requireAuth } from "./middleware/requireAuth";
+import {
+  requireAuth,
+  restoreAuthenticatedUserContext,
+} from "./middleware/requireAuth";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -241,7 +244,7 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
 
     res.json({
       count: savedSongList.songs.length,
-      file: "runtime/current-song-list.json",
+      file: "runtime/users/current-song-list.json",
       data: savedSongList,
     });
   } catch (error) {
@@ -527,6 +530,7 @@ app.post("/api/dev/game-command", async (req, res) => {
 app.post(
   "/api/dev/transcribe-audio",
   upload.single("audio"),
+  restoreAuthenticatedUserContext,
   async (req, res) => {
     try {
       const file = req.file;
@@ -571,6 +575,7 @@ app.post(
 app.post(
   "/api/dev/submit-audio-answer",
   upload.single("audio"),
+  restoreAuthenticatedUserContext,
   async (req, res) => {
     const startedAt = performance.now();
 

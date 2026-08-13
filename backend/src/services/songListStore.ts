@@ -1,19 +1,36 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
+import { getCurrentUserStorageKey } from "../lib/requestContext";
 import type {
   CurrentSongListFile,
   GeneratedSong,
   GenerateSongListParams,
 } from "../types/song";
 
-const runtimeDir = path.join(process.cwd(), "runtime");
-const currentSongListPath = path.join(runtimeDir, "current-song-list.json");
+function getSongListPaths(): {
+  currentSongListPath: string;
+  userRuntimeDir: string;
+} {
+  const userRuntimeDir = path.join(
+    process.cwd(),
+    "runtime",
+    "users",
+    getCurrentUserStorageKey(),
+  );
+
+  return {
+    currentSongListPath: path.join(userRuntimeDir, "current-song-list.json"),
+    userRuntimeDir,
+  };
+}
 
 export async function saveCurrentSongList(
   request: GenerateSongListParams,
   songs: GeneratedSong[],
 ): Promise<CurrentSongListFile> {
-  await mkdir(runtimeDir, { recursive: true });
+  const { currentSongListPath, userRuntimeDir } = getSongListPaths();
+
+  await mkdir(userRuntimeDir, { recursive: true });
 
   const fileContent: CurrentSongListFile = {
     generatedAt: new Date().toISOString(),
@@ -38,6 +55,7 @@ export async function saveCurrentSongList(
 }
 
 export async function readCurrentSongList(): Promise<CurrentSongListFile> {
+  const { currentSongListPath } = getSongListPaths();
   const fileContent = await readFile(currentSongListPath, "utf-8");
   return JSON.parse(fileContent) as CurrentSongListFile;
 }
@@ -56,7 +74,9 @@ export async function readCurrentSongListIfExists(): Promise<CurrentSongListFile
 export async function saveCurrentSongListFile(
   fileContent: CurrentSongListFile,
 ): Promise<CurrentSongListFile> {
-  await mkdir(runtimeDir, { recursive: true });
+  const { currentSongListPath, userRuntimeDir } = getSongListPaths();
+
+  await mkdir(userRuntimeDir, { recursive: true });
 
   await writeFile(
     currentSongListPath,

@@ -1,17 +1,34 @@
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
+import { getCurrentUserStorageKey } from "../lib/requestContext";
 import type { GameSession } from "../types/game";
 
-const runtimeDir = path.join(process.cwd(), "runtime");
-const currentGameSessionPath = path.join(
-  runtimeDir,
-  "current-game-session.json",
-);
+function getGameSessionPaths(): {
+  currentGameSessionPath: string;
+  userRuntimeDir: string;
+} {
+  const userRuntimeDir = path.join(
+    process.cwd(),
+    "runtime",
+    "users",
+    getCurrentUserStorageKey(),
+  );
+
+  return {
+    currentGameSessionPath: path.join(
+      userRuntimeDir,
+      "current-game-session.json",
+    ),
+    userRuntimeDir,
+  };
+}
 
 export async function saveCurrentGameSession(
   session: GameSession,
 ): Promise<GameSession> {
-  await mkdir(runtimeDir, { recursive: true });
+  const { currentGameSessionPath, userRuntimeDir } = getGameSessionPaths();
+
+  await mkdir(userRuntimeDir, { recursive: true });
   await writeFile(
     currentGameSessionPath,
     JSON.stringify(session, null, 2),
@@ -21,6 +38,7 @@ export async function saveCurrentGameSession(
 }
 
 export async function readCurrentGameSession(): Promise<GameSession> {
+  const { currentGameSessionPath } = getGameSessionPaths();
   const fileContent = await readFile(currentGameSessionPath, "utf-8");
   const session = JSON.parse(fileContent) as GameSession;
 
@@ -32,5 +50,6 @@ export async function readCurrentGameSession(): Promise<GameSession> {
 }
 
 export async function deleteCurrentGameSession(): Promise<void> {
+  const { currentGameSessionPath } = getGameSessionPaths();
   await rm(currentGameSessionPath, { force: true });
 }
