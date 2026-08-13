@@ -7,8 +7,25 @@ import {
 import { buildSongListPrompt } from "../prompts/songListPrompt";
 import type { GeneratedSong, GenerateSongListParams } from "../types/song";
 import { buildSongListResponseSchema } from "../schemas/songListSchema";
+import {
+  getPopularityTierCounts,
+  shuffleSongs,
+} from "./songDiversityService";
+import {
+  getRequestedGenres,
+  matchesEveryRequestedGenre,
+} from "./songGenreService";
+import { randomUUID } from "node:crypto";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
+const CURATION_FOCUSES = [
+  "Balance radio hits, fan favourites, and overlooked tracks.",
+  "Prefer recognizable songs that are not always the first obvious quiz choice.",
+  "Mix commercial hits with credible local, alternative, and cult favourites.",
+  "Explore different artists and scenes while preserving Hungarian cultural relevance.",
+] as const;
+
+type ExcludedSong = Pick<GeneratedSong, "artist" | "title">;
 
 function getHungarianSongCount(
   totalSongCount: number,
@@ -39,6 +56,7 @@ function getHungarianSongCount(
 
 export async function generateSongList(
   params: GenerateSongListParams,
+  excludedSongs: ExcludedSong[] = [],
 ): Promise<GeneratedSong[]> {
   const apiKey = process.env.GEMINI_API_KEY;
 
@@ -51,6 +69,12 @@ export async function generateSongList(
   }
 
   const targetSongCount = params.players * params.songsPerPlayer;
+  const requestedGenres = getRequestedGenres(params.genre);
+
+  if (requestedGenres.length === 0) {
+    throw new Error("At least one genre is required.");
+  }
+
   const generatedSongCount = Math.ceil(
     targetSongCount * SONG_GENERATION_BUFFER_MULTIPLIER,
   );
@@ -58,12 +82,20 @@ export async function generateSongList(
     generatedSongCount,
     params.hungarianSongMode,
   );
+  const popularityTierCounts = getPopularityTierCounts(generatedSongCount);
+  const curationFocus =
+    CURATION_FOCUSES[Math.floor(Math.random() * CURATION_FOCUSES.length)];
 
   const ai = new GoogleGenAI({ apiKey });
   const prompt = buildSongListPrompt({
     ...params,
+    curationFocus,
+    excludedSongs,
     generatedSongCount,
     hungarianSongCount,
+    popularityTierCounts,
+    requestedGenres,
+    variationId: randomUUID(),
   });
 
   console.log(
@@ -103,14 +135,19 @@ export async function generateSongList(
     );
   }
 
-  return parsed.map((item, index) => {
+  const songs: GeneratedSong[] = parsed.map((item, index) => {
     const song = item as Record<string, unknown>;
+    const popularityTier = song.popularityTier;
+
     if (
       typeof song.artist !== "string" ||
       typeof song.title !== "string" ||
       typeof song.year !== "number" ||
       !Array.isArray(song.genres) ||
-      !song.genres.every((genre) => typeof genre === "string")
+      !song.genres.every((genre) => typeof genre === "string") ||
+      (popularityTier !== "mainstream" &&
+        popularityTier !== "familiar" &&
+        popularityTier !== "discovery")
     ) {
       throw new Error(`Invalid song format at index ${index}.`);
     }
@@ -120,6 +157,27 @@ export async function generateSongList(
       title: song.title,
       year: song.year,
       genres: song.genres,
+      popularityTier,
     };
   });
+
+  const matchingSongs = songs.filter((song) =>
+    matchesEveryRequestedGenre(song.genres, requestedGenres),
+  );
+
+  if (matchingSongs.length < targetSongCount) {
+    throw new Error(
+      `Gemini returned only ${matchingSongs.length} songs matching every requested genre, but ${targetSongCount} are required.`,
+    );
+  }
+
+  const rejectedSongCount = songs.length - matchingSongs.length;
+
+  if (rejectedSongCount > 0) {
+    console.warn(
+      `Rejected ${rejectedSongCount} songs that did not match every requested genre: ${requestedGenres.join(", ")}.`,
+    );
+  }
+
+  return shuffleSongs(matchingSongs);
 }

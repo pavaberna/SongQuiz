@@ -28,9 +28,47 @@ export async function findCachedTrackBySong(
   });
 }
 
+export async function findCachedTracksByYearRange(
+  minimumYear?: number,
+  maximumYear?: number,
+): Promise<Track[]> {
+  const hasYearRange =
+    minimumYear !== undefined && maximumYear !== undefined;
+
+  return prisma.track.findMany({
+    where: hasYearRange
+      ? {
+          year: {
+            gte: minimumYear,
+            lte: maximumYear,
+          },
+        }
+      : undefined,
+  });
+}
+
 export async function saveTrackToCache(song: StoredSong): Promise<Track> {
   if (!song.youtubeId || !song.duration) {
     throw new Error("Cannot cache song without youtubeId and duration.");
+  }
+
+  const viewCount =
+    typeof song.viewCount === "number" ? BigInt(song.viewCount) : undefined;
+
+  const existingSong = await findCachedTrackBySong(song.artist, song.title);
+
+  if (existingSong) {
+    return prisma.track.update({
+      where: { id: existingSong.id },
+      data: {
+        title: song.title,
+        artist: song.artist,
+        year: song.year,
+        genres: song.genres,
+        duration: song.duration,
+        ...(viewCount !== undefined && { viewCount }),
+      },
+    });
   }
 
   return prisma.track.upsert({
@@ -43,6 +81,7 @@ export async function saveTrackToCache(song: StoredSong): Promise<Track> {
       year: song.year,
       genres: song.genres,
       duration: song.duration,
+      ...(viewCount !== undefined && { viewCount }),
     },
     create: {
       youtubeId: song.youtubeId,
@@ -51,6 +90,7 @@ export async function saveTrackToCache(song: StoredSong): Promise<Track> {
       year: song.year,
       genres: song.genres,
       duration: song.duration,
+      viewCount: viewCount ?? null,
     },
   });
 }

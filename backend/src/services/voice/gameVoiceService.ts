@@ -12,7 +12,9 @@ export function createAnswerVoiceInstruction(
 
   let key: VoiceLineKey;
 
-  if (perfectMatch) {
+  if (result.skipped) {
+    key = "answer_skipped";
+  } else if (perfectMatch) {
     key = "answer_perfect";
   } else if (artistCorrect && titleCorrect) {
     key = "answer_both_correct";

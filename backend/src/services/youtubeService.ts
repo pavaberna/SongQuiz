@@ -12,6 +12,28 @@ import {
 import { correctSongMetadata } from "./songMetadataCorrectionService";
 import { validateSongVideo } from "./youtubeVideoValidator";
 
+const pacificDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "America/Los_Angeles",
+  year: "numeric",
+});
+
+let quotaExhaustedDate: string | null = null;
+
+export class YoutubeQuotaExceededError extends Error {
+  constructor() {
+    super("YouTube search quota is exhausted for today.");
+    this.name = "YoutubeQuotaExceededError";
+  }
+}
+
+export function isYoutubeQuotaExceededError(
+  error: unknown,
+): error is YoutubeQuotaExceededError {
+  return error instanceof YoutubeQuotaExceededError;
+}
+
 function isPlayableDuration(duration: number): boolean {
   return (
     duration >= MIN_PLAYABLE_DURATION_SECONDS &&
@@ -21,6 +43,63 @@ function isPlayableDuration(duration: number): boolean {
 
 function parseYoutubeDuration(duration: string): number {
   return toSeconds(parse(duration));
+}
+
+function getPacificDateKey(): string {
+  return pacificDateFormatter.format(new Date());
+}
+
+function assertYoutubeQuotaAvailable(): void {
+  if (quotaExhaustedDate === null) {
+    return;
+  }
+
+  if (quotaExhaustedDate !== getPacificDateKey()) {
+    quotaExhaustedDate = null;
+    return;
+  }
+
+  throw new YoutubeQuotaExceededError();
+}
+
+function isGoogleQuotaExceededError(error: unknown): boolean {
+  const googleError = error as {
+    code?: number;
+    response?: {
+      data?: {
+        error?: {
+          errors?: { reason?: string }[];
+        };
+      };
+      status?: number;
+    };
+  };
+  const status = googleError.response?.status ?? googleError.code;
+  const reasons =
+    googleError.response?.data?.error?.errors?.map((item) => item.reason) ?? [];
+
+  return (
+    status === 403 &&
+    reasons.some(
+      (reason) =>
+        reason === "quotaExceeded" || reason === "dailyLimitExceeded",
+    )
+  );
+}
+
+async function runYoutubeRequest<T>(request: () => Promise<T>): Promise<T> {
+  assertYoutubeQuotaAvailable();
+
+  try {
+    return await request();
+  } catch (error) {
+    if (isGoogleQuotaExceededError(error)) {
+      quotaExhaustedDate = getPacificDateKey();
+      throw new YoutubeQuotaExceededError();
+    }
+
+    throw error;
+  }
 }
 
 export async function findYoutubeVideoForSong(
@@ -39,14 +118,16 @@ export async function findYoutubeVideoForSong(
 
   const query = `${params.artist} ${params.title} official audio`;
 
-  const searchResponse = await youtube.search.list({
-    part: ["snippet"],
-    q: query,
-    maxResults: 5,
-    type: ["video"],
-    regionCode: "HU",
-    relevanceLanguage: "hu",
-  });
+  const searchResponse = await runYoutubeRequest(() =>
+    youtube.search.list({
+      part: ["snippet"],
+      q: query,
+      maxResults: 5,
+      type: ["video"],
+      regionCode: "HU",
+      relevanceLanguage: "hu",
+    }),
+  );
 
   const youtubeIds =
     searchResponse.data.items
@@ -57,10 +138,12 @@ export async function findYoutubeVideoForSong(
     throw new Error(`No YouTube video found for: ${query}`);
   }
 
-  const videoResponse = await youtube.videos.list({
-    part: ["contentDetails", "snippet", "status"],
-    id: youtubeIds,
-  });
+  const videoResponse = await runYoutubeRequest(() =>
+    youtube.videos.list({
+      part: ["contentDetails", "snippet", "statistics", "status"],
+      id: youtubeIds,
+    }),
+  );
 
   let correctionAttempted = false;
 
@@ -71,12 +154,14 @@ export async function findYoutubeVideoForSong(
     const channelTitle = video.snippet?.channelTitle;
     const description = (video.snippet?.description ?? "").slice(0, 1000);
     const embeddable = video.status?.embeddable;
+    const viewCount = Number(video.statistics?.viewCount);
 
     if (
       !youtubeId ||
       !durationText ||
       !videoTitle ||
       !channelTitle ||
+      !Number.isSafeInteger(viewCount) ||
       embeddable !== true
     ) {
       continue;
@@ -95,6 +180,7 @@ export async function findYoutubeVideoForSong(
       channelTitle,
       description,
       embeddable,
+      viewCount,
     };
 
     const validation = validateSongVideo(params, videoMatch);

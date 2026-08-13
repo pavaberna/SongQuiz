@@ -10,7 +10,12 @@ export async function prepareGame(
   const maxRequests = Math.ceil(generatedSongCount / ENRICHMENT_LIMIT);
 
   for (let requestCount = 0; requestCount < maxRequests; requestCount++) {
-    const result = await prepareGameSession(ENRICHMENT_LIMIT, signal);
+    const isLastRequest = requestCount === maxRequests - 1;
+    const result = await prepareGameSession(
+      ENRICHMENT_LIMIT,
+      signal,
+      isLastRequest,
+    );
 
     if (result.ready) {
       return result.session;

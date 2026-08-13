@@ -3,7 +3,7 @@ import { SongPlayer } from "./SongPlayer";
 import type { SubmitAudioAnswerResponse } from "../../types/answer";
 import type { GameplayPhase, GameplayProps } from "../../types/gameplay";
 import { recordAndSubmitAnswer } from "./recordAndSubmitAnswer";
-import { playVoiceInstruction } from "../../api/voiceApi";
+import { playVoiceInstruction, playVoiceLine } from "../../api/voiceApi";
 import { getGameSummary, startRound } from "../../api/gameApi";
 import type { GameSummary } from "../../types/gameSummary";
 import { sendGameCommand } from "../../api/gameCommandApi";
@@ -14,6 +14,7 @@ import { startPlayAgain } from "../../api/replayApi";
 import { AppHeader } from "../../components/layout/AppHeader";
 import { GameEndControls } from "./GameEndControls";
 import { GameResultsTable } from "./GameResultsTable";
+import { listenForReplayDecision } from "./listenForReplayDecision";
 
 const textByLanguage = {
   hu: {
@@ -79,6 +80,7 @@ export function Gameplay({
   const [isCommandPending, setIsCommandPending] = useState(false);
 
   const answerAbortControllerRef = useRef<AbortController | null>(null);
+  const replayAbortControllerRef = useRef<AbortController | null>(null);
 
   const youtubeId = currentRound.currentSong.youtubeId;
 
@@ -94,6 +96,11 @@ export function Gameplay({
   function cancelAnswerRecording(): void {
     answerAbortControllerRef.current?.abort();
     answerAbortControllerRef.current = null;
+  }
+
+  function cancelReplayDecision(): void {
+    replayAbortControllerRef.current?.abort();
+    replayAbortControllerRef.current = null;
   }
 
   function isCancelledError(error: unknown): boolean {
@@ -115,6 +122,7 @@ export function Gameplay({
     }
 
     if (command === "end") {
+      cancelReplayDecision();
       setIsPaused(true);
     }
 
@@ -176,6 +184,7 @@ export function Gameplay({
         correctArtist: response.result.correctAnswer.artist,
         correctTitle: response.result.correctAnswer.title,
         pointsAwarded: response.result.pointsAwarded,
+        skipped: response.result.skipped,
         judgeResult: response.result.judgeResult,
       });
       setPhase("result");
@@ -229,13 +238,61 @@ export function Gameplay({
   }
 
   async function showGameSummary() {
+    cancelReplayDecision();
+
+    const replayController = new AbortController();
+    replayAbortControllerRef.current = replayController;
+
     const response = await getGameSummary();
     setGameSummary(response.summary);
     setPhase("finished");
-    await playVoiceInstruction(language, response.voice);
+
+    try {
+      await playVoiceInstruction(
+        language,
+        response.voice,
+        replayController.signal,
+      );
+      await playVoiceLine(
+        language,
+        "ask_play_again",
+        replayController.signal,
+      );
+
+      const replayResponse = await listenForReplayDecision(
+        language,
+        replayController.signal,
+      );
+
+      if (replayResponse.result.decision === "replay") {
+        await onReplay(replayResponse.result.setup);
+        return;
+      }
+
+      await playVoiceLine(
+        language,
+        replayResponse.voice.key,
+        replayController.signal,
+      );
+      onGameEnd();
+    } catch (error) {
+      if (!isCancelledError(error)) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "The replay decision could not be handled.";
+
+        setGameplayError(message);
+      }
+    } finally {
+      if (replayAbortControllerRef.current === replayController) {
+        replayAbortControllerRef.current = null;
+      }
+    }
   }
 
   async function handlePlayAgain(): Promise<void> {
+    cancelReplayDecision();
     setGameplayError(null);
     setIsCommandPending(true);
 

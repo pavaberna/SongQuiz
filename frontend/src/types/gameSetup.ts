@@ -1,7 +1,6 @@
 import type { GameLanguage } from "./language";
 import type { GameCommand } from "./gameCommand";
 import type { GameSettings } from "./settings";
-import type { TranscriptionContext } from "./speech";
 import type { StaticVoiceLineKey } from "./voice";
 
 export type GameSetupStatus =
@@ -35,14 +34,15 @@ export type AskAndTranscribeOptions = {
   onStatusChange: (status: GameSetupStatus) => void;
   signal?: AbortSignal;
   voiceLineKey: StaticVoiceLineKey;
-  transcriptionContext: TranscriptionContext;
+  transcriptionContext: "player_count" | "decade" | "genre";
 };
 
-export type AskUntilValidOptions<T> = AskAndTranscribeOptions & {
+export type AskUntilValidOptions<T extends number | string> =
+  AskAndTranscribeOptions & {
   parseAnswer: (transcript: string) => T | null;
 };
 
-export type ValidSetupAnswer<T> = {
+export type ValidSetupAnswer<T extends number | string> = {
   transcript: string;
   value: T;
 };

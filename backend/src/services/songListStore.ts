@@ -24,6 +24,7 @@ export async function saveCurrentSongList(
       ...song,
       youtubeId: null,
       duration: null,
+      viewCount: null,
     })),
   };
 
@@ -39,6 +40,18 @@ export async function saveCurrentSongList(
 export async function readCurrentSongList(): Promise<CurrentSongListFile> {
   const fileContent = await readFile(currentSongListPath, "utf-8");
   return JSON.parse(fileContent) as CurrentSongListFile;
+}
+
+export async function readCurrentSongListIfExists(): Promise<CurrentSongListFile | null> {
+  try {
+    return await readCurrentSongList();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  }
 }
 export async function saveCurrentSongListFile(
   fileContent: CurrentSongListFile,

@@ -43,7 +43,7 @@ async function getYoutubeVideo(track: Track): Promise<YoutubeVideoMatch> {
   });
 
   const response = await youtube.videos.list({
-    part: ["contentDetails", "snippet", "status"],
+    part: ["contentDetails", "snippet", "statistics", "status"],
     id: [track.youtubeId],
   });
 
@@ -58,8 +58,15 @@ async function getYoutubeVideo(track: Track): Promise<YoutubeVideoMatch> {
   const channelTitle = video.snippet?.channelTitle;
   const description = (video.snippet?.description ?? "").slice(0, 1000);
   const embeddable = video.status?.embeddable;
+  const viewCount = Number(video.statistics?.viewCount);
 
-  if (!durationText || !videoTitle || !channelTitle || embeddable !== true) {
+  if (
+    !durationText ||
+    !videoTitle ||
+    !channelTitle ||
+    !Number.isSafeInteger(viewCount) ||
+    embeddable !== true
+  ) {
     throw new Error("YouTube video metadata is incomplete.");
   }
 
@@ -76,6 +83,7 @@ async function getYoutubeVideo(track: Track): Promise<YoutubeVideoMatch> {
     channelTitle,
     description,
     embeddable,
+    viewCount,
   };
 }
 

@@ -4,6 +4,7 @@ import cors from "cors";
 import { generateSongList } from "./services/geminiMusicCurator";
 import {
   readCurrentSongList,
+  readCurrentSongListIfExists,
   saveCurrentSongList,
 } from "./services/songListStore";
 import { findYoutubeVideoForSong } from "./services/youtubeService";
@@ -40,7 +41,9 @@ import {
 } from "./services/voice/voiceService";
 import { generateSpeech } from "./services/textToSpeechService";
 import {
+  readDynamicVoiceLineAudio,
   readVoiceLineAudio,
+  saveDynamicVoiceLineAudio,
   saveVoiceLineAudio,
 } from "./services/voice/voiceAudioStore";
 import type { VoiceLineParams } from "./services/voice/voiceTypes";
@@ -58,6 +61,7 @@ import {
 import { transcriptionContexts } from "./types/speech";
 import type { TranscriptionContext } from "./types/speech";
 import type { HungarianSongMode } from "./types/song";
+import { shuffleSongs } from "./services/songDiversityService";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -153,7 +157,12 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
       hungarianSongMode,
       songsPerPlayer,
     };
-    const songs = await generateSongList(request);
+    const previousSongList = await readCurrentSongListIfExists();
+    const previousSongs = previousSongList?.songs ?? [];
+    const excludedSongs = shuffleSongs(previousSongs)
+      .slice(0, 40)
+      .map((song) => ({ artist: song.artist, title: song.title }));
+    const songs = await generateSongList(request, excludedSongs);
     const savedSongList = await saveCurrentSongList(request, songs);
 
     res.json({
@@ -268,6 +277,7 @@ app.post("/api/dev/create-game-session", async (req, res) => {
 app.post("/api/dev/prepare-game-session", async (req, res) => {
   try {
     const enrichmentLimit = Number(req.body.enrichmentLimit ?? 10);
+    const useCacheFallback = req.body.useCacheFallback === true;
 
     if (
       !Number.isInteger(enrichmentLimit) ||
@@ -279,7 +289,10 @@ app.post("/api/dev/prepare-game-session", async (req, res) => {
       });
       return;
     }
-    const result = await prepareGameSession(enrichmentLimit);
+    const result = await prepareGameSession(
+      enrichmentLimit,
+      useCacheFallback,
+    );
 
     res.json(result);
   } catch (error) {
@@ -485,6 +498,8 @@ app.post(
   "/api/dev/submit-audio-answer",
   upload.single("audio"),
   async (req, res) => {
+    const startedAt = performance.now();
+
     try {
       const file = req.file;
 
@@ -495,14 +510,22 @@ app.post(
 
       const session = await readCurrentGameSession();
 
+      const transcriptionStartedAt = performance.now();
       const text = await transcribeAudio(file, {
         context: "song_answer",
         language: session.language,
       });
+      const transcriptionMs = performance.now() - transcriptionStartedAt;
 
+      const answerStartedAt = performance.now();
       const result = await submitAnswer(text);
+      const answerMs = performance.now() - answerStartedAt;
 
       const voice = createAnswerVoiceInstruction(result);
+
+      console.info(
+        `[timing] submit audio answer total=${Math.round(performance.now() - startedAt)}ms transcription=${Math.round(transcriptionMs)}ms answer=${Math.round(answerMs)}ms skipped=${result.skipped}`,
+      );
 
       res.json({ transcript: text, result, voice });
     } catch (error) {
@@ -695,9 +718,36 @@ app.post("/api/dev/voice-line-audio-preview", async (req, res) => {
 
     const text = getVoiceLine(checkedLanguage, checkedKey, params);
 
+    const startedAt = performance.now();
+    const cachedAudio = await readDynamicVoiceLineAudio(
+      checkedLanguage,
+      text,
+    );
+
+    if (cachedAudio) {
+      console.info(
+        `[timing] tts key=${checkedKey} total=${Math.round(performance.now() - startedAt)}ms cache=HIT`,
+      );
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("X-Voice-Cache", "HIT");
+      res.send(cachedAudio);
+      return;
+    }
+
     const speech = await generateSpeech(text);
 
+    await saveDynamicVoiceLineAudio(
+      checkedLanguage,
+      text,
+      speech.audioBuffer,
+    );
+
+    console.info(
+      `[timing] tts key=${checkedKey} total=${Math.round(performance.now() - startedAt)}ms cache=MISS`,
+    );
+
     res.setHeader("Content-Type", speech.contentType);
+    res.setHeader("X-Voice-Cache", "MISS");
     res.send(speech.audioBuffer);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

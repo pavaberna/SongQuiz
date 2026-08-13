@@ -17,6 +17,7 @@ export type SubmitAnswerResult = {
   session: GameSession;
   playerId: number;
   pointsAwarded: number;
+  skipped: boolean;
   judgeResult: {
     artistCorrect: boolean;
     titleCorrect: boolean;

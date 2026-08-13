@@ -23,6 +23,7 @@ export type SubmitAnswerResult = {
   playerId: number;
   pointsAwarded: number;
   session: AnswerSession;
+  skipped: boolean;
 };
 
 export type AnswerVoiceInstruction = {
@@ -31,6 +32,7 @@ export type AnswerVoiceInstruction = {
     | "answer_both_correct"
     | "answer_none_correct"
     | "answer_perfect"
+    | "answer_skipped"
     | "answer_title_correct";
   params: {
     correctArtist: string;

@@ -10,6 +10,7 @@ export type YoutubeVideoMatch = {
   channelTitle: string;
   description: string;
   embeddable: boolean;
+  viewCount: number;
 };
 
 export type YoutubeVideoValidation = {

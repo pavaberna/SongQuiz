@@ -4,6 +4,7 @@ import { API_BASE_URL } from "./apiConfig";
 
 export async function submitReplayDecision(
   answer: string,
+  signal?: AbortSignal,
 ): Promise<ReplayDecisionResponse> {
   const url = new URL("/api/dev/replay-decision", API_BASE_URL);
 
@@ -13,6 +14,7 @@ export async function submitReplayDecision(
     headers: {
       "Content-Type": "application/json",
     },
+    signal,
   });
 
   if (!response.ok) {

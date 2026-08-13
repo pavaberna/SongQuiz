@@ -11,6 +11,7 @@ export const voiceLineKeys = [
   "answer_title_correct",
   "answer_both_correct",
   "answer_perfect",
+  "answer_skipped",
   "game_summary",
   "ask_play_again",
   "game_paused",
@@ -52,6 +53,7 @@ export const requiredVoiceLineParams: Partial<
   answer_title_correct: ["correctArtist", "points"],
   answer_both_correct: ["correctArtist", "correctTitle", "points"],
   answer_perfect: ["points"],
+  answer_skipped: ["correctArtist", "correctTitle", "points"],
 
   game_summary: ["playerScores", "winnerIds"],
   game_resumed: ["roundNumber", "playerId"],

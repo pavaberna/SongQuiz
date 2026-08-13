@@ -22,6 +22,8 @@ export const enVoiceLines: VoiceLineCatalog = {
     `Congratulations, your answer is correct. You get ${points} points. The perfect answer would have been ${correctArtist}: ${correctTitle}.`,
   answer_perfect: ({ points }) =>
     `Congratulations! Perfect answer! You get ${points} points!`,
+  answer_skipped: ({ correctArtist, correctTitle, points }) =>
+    `The correct answer was ${correctArtist}: ${correctTitle}. ${points} points.`,
   game_summary: ({ playerScores, winnerId, winnerIds }) => {
     const scoresText = playerScores
       ?.map((player) => `Player ${player.playerId} scored ${player.score}`)

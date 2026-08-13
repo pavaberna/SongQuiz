@@ -2,8 +2,10 @@ const MIN_PLAYERS = 1;
 const MAX_PLAYERS = 20;
 
 const playerCountWords: Record<string, number> = {
+  agyadu: 1,
   egy: 1,
   egyedül: 1,
+  egyetőr: 1,
   one: 1,
   két: 2,
   ketten: 2,
@@ -67,8 +69,97 @@ const playerCountWords: Record<string, number> = {
 
 const punctuationMarks = [".", ",", "!", "?", ":", ";", "-", "(", ")"];
 
+const hungarianAccentReplacements: Record<string, string> = {
+  á: "a",
+  é: "e",
+  í: "i",
+  ó: "o",
+  ö: "o",
+  ő: "o",
+  ú: "u",
+  ü: "u",
+  ű: "u",
+};
+
+function removeHungarianAccents(text: string): string {
+  let normalizedText = text;
+
+  for (const [accentedCharacter, plainCharacter] of Object.entries(
+    hungarianAccentReplacements,
+  )) {
+    normalizedText = normalizedText.replaceAll(
+      accentedCharacter,
+      plainCharacter,
+    );
+  }
+
+  return normalizedText;
+}
+
+const normalizedPlayerCountWords = Object.entries(playerCountWords).map(
+  ([word, playerCount]) => [removeHungarianAccents(word), playerCount] as const,
+);
+
+function differsByAtMostOneCharacter(
+  firstText: string,
+  secondText: string,
+): boolean {
+  if (
+    Math.abs(firstText.length - secondText.length) > 1 ||
+    Math.min(firstText.length, secondText.length) < 4
+  ) {
+    return false;
+  }
+
+  if (firstText.length !== secondText.length) {
+    const shorterText =
+      firstText.length < secondText.length ? firstText : secondText;
+    const longerText =
+      firstText.length < secondText.length ? secondText : firstText;
+    let shorterIndex = 0;
+    let longerIndex = 0;
+    let skippedCharacterCount = 0;
+
+    while (
+      shorterIndex < shorterText.length &&
+      longerIndex < longerText.length
+    ) {
+      if (shorterText[shorterIndex] === longerText[longerIndex]) {
+        shorterIndex++;
+        longerIndex++;
+        continue;
+      }
+
+      skippedCharacterCount++;
+      longerIndex++;
+
+      if (skippedCharacterCount > 1) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  let differentCharacterCount = 0;
+
+  for (let index = 0; index < firstText.length; index++) {
+    if (firstText[index] !== secondText[index]) {
+      differentCharacterCount++;
+    }
+
+    if (differentCharacterCount > 1) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function parsePlayerCount(transcript: string): number | null {
-  let normalizedTranscript = transcript.toLocaleLowerCase().trim();
+  let normalizedTranscript = removeHungarianAccents(
+    transcript.toLocaleLowerCase().trim(),
+  );
 
   for (const punctuation of punctuationMarks) {
     normalizedTranscript = normalizedTranscript.replaceAll(punctuation, " ");
@@ -87,10 +178,22 @@ export function parsePlayerCount(transcript: string): number | null {
       return numericValue;
     }
 
-    const wordValue = playerCountWords[word];
+    const wordValue = normalizedPlayerCountWords.find(
+      ([numberWord]) => numberWord === word,
+    )?.[1];
 
     if (wordValue !== undefined) {
       return wordValue;
+    }
+  }
+
+  for (const word of words) {
+    const fuzzyMatch = normalizedPlayerCountWords.find(([numberWord]) =>
+      differsByAtMostOneCharacter(word, numberWord),
+    );
+
+    if (fuzzyMatch !== undefined) {
+      return fuzzyMatch[1];
     }
   }
 

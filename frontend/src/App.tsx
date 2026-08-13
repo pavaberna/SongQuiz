@@ -20,7 +20,6 @@ import { Gameplay } from "./features/gameplay/Gameplay";
 import type { StaticVoiceLineKey } from "./types/voice";
 import type { ReplaySetup } from "./types/replay";
 import { parseMusicPeriod } from "./features/game-setup/parseMusicPeriod";
-import { saveGameLogEntry } from "./services/gameLogStore";
 import type { GameCommand } from "./types/gameCommand";
 import { sendGameCommand } from "./api/gameCommandApi";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -69,13 +68,6 @@ function App() {
 
     setDecade(trimmedDecade);
     setTranscript(decadeAnswer.transcript);
-    saveGameLogEntry({
-      context: "decade",
-      createdAt: new Date().toISOString(),
-      kind: "setup_transcript",
-      parsedValue: trimmedDecade,
-      transcript: decadeAnswer.transcript,
-    });
 
     const genreAnswer = await askUntilValid({
       language,
@@ -90,13 +82,6 @@ function App() {
 
     setGenre(trimmedGenre);
     setTranscript(genreAnswer.transcript);
-    saveGameLogEntry({
-      context: "genre",
-      createdAt: new Date().toISOString(),
-      kind: "setup_transcript",
-      parsedValue: trimmedGenre,
-      transcript: genreAnswer.transcript,
-    });
     setSetupStatus("generating");
 
     const gamePromise = generateSongs(
@@ -175,13 +160,6 @@ function App() {
 
       setTranscript(playerAnswer.transcript);
       setPlayers(parsedPlayers);
-      saveGameLogEntry({
-        context: "player_count",
-        createdAt: new Date().toISOString(),
-        kind: "setup_transcript",
-        parsedValue: parsedPlayers,
-        transcript: playerAnswer.transcript,
-      });
       await setupGame(
         parsedPlayers,
         "ask_decade",

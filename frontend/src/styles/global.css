@@ -125,6 +125,9 @@ textarea {
     var(--song-ring-color) 0deg 324deg,
     transparent 324deg 360deg
   );
+  filter:
+    drop-shadow(0 0 2px var(--song-ring-color))
+    drop-shadow(0 0 5px var(--song-ring-glow));
   -webkit-mask: radial-gradient(
     farthest-side,
     transparent calc(100% - 5px),

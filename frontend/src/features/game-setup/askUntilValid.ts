@@ -3,8 +3,9 @@ import type {
   ValidSetupAnswer,
 } from "../../types/gameSetup";
 import { askAndTranscribe } from "./askAndTranscribe";
+import { saveGameLogEntry } from "../../services/gameLogStore";
 
-export async function askUntilValid<T>({
+export async function askUntilValid<T extends number | string>({
   language,
   onStatusChange,
   parseAnswer,
@@ -23,7 +24,30 @@ export async function askUntilValid<T>({
       voiceLineKey: currentVoiceLineKey,
     });
 
+    if (transcript === null) {
+      saveGameLogEntry({
+        accepted: false,
+        context: transcriptionContext,
+        createdAt: new Date().toISOString(),
+        kind: "setup_transcript",
+        parsedValue: null,
+        transcript: "",
+      });
+
+      currentVoiceLineKey = voiceLineKey;
+      continue;
+    }
+
     const value = parseAnswer(transcript);
+
+    saveGameLogEntry({
+      accepted: value !== null,
+      context: transcriptionContext,
+      createdAt: new Date().toISOString(),
+      kind: "setup_transcript",
+      parsedValue: value,
+      transcript,
+    });
 
     if (value !== null) {
       return {

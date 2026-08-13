@@ -40,3 +40,45 @@ export async function submitAudioAnswer(
 
   return data;
 }
+
+export async function submitSkippedAnswer(
+  signal?: AbortSignal,
+): Promise<SubmitAudioAnswerResponse> {
+  const url = new URL("/api/dev/submit-answer", API_BASE_URL);
+  const response = await fetch(url, {
+    body: JSON.stringify({ answer: "pass" }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorData = (await response
+      .json()
+      .catch(() => null)) as ApiErrorResponse | null;
+
+    throw new Error(
+      errorData?.error ??
+        `Submitting the skipped answer failed with status ${response.status}.`,
+    );
+  }
+
+  const data = (await response.json()) as Omit<
+    SubmitAudioAnswerResponse,
+    "transcript"
+  >;
+
+  if (
+    typeof data.result?.pointsAwarded !== "number" ||
+    typeof data.voice?.key !== "string"
+  ) {
+    throw new Error("The skipped answer response is invalid.");
+  }
+
+  return {
+    ...data,
+    transcript: "",
+  };
+}

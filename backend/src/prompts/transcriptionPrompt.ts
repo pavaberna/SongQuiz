@@ -7,25 +7,25 @@ const transcriptionPrompts: Record<
 > = {
   en: {
     decade:
-      "Song Quiz setup. The speaker names a music decade, such as eighties, nineties, two thousands, twenty tens, or mixed.",
+      "Song Quiz setup. The speaker names a music decade or year, such as ten, twenty, 2000, 2010, 2020, eighties, nineties, two thousands, twenty tens, or mixed. Transcribe the number exactly as spoken.",
     genre:
-      "Song Quiz setup. The speaker names a music genre, such as pop, rock, hip-hop, rap, electronic, jazz, metal, or classical.",
+      "Song Quiz setup. The speaker names one or more music genres, such as pop, rock, hip-hop, rap, electronic, jazz, metal, or classical. Preserve every spoken genre and separate multiple genres with commas.",
     player_count:
-      "Song Quiz setup. The speaker says a player count between one and twenty.",
+      "Song Quiz player count. Possible answers include: alone, one, two, three, four, five, six, seven, eight, nine, ten, up to twenty.",
     song_answer:
-      "Song Quiz answer. The speaker may name a music artist and a song title. Preserve names and titles accurately.",
+      "Song Quiz answer. The speaker may say a music artist and song title in Hungarian or English. Preserve foreign names and English song titles in their original language. Do not rewrite them as similar-sounding words from another language.",
     replay_decision:
       "Song Quiz replay decision. The speaker answers whether they want another game. Expected words include yes, yeah, no, and nope.",
   },
   hu: {
     decade:
-      "Song Quiz beállítás. A beszélő zenei évtizedet mond, például nyolcvanas, kilencvenes, kétezres, kétezer-tízes évek vagy vegyes.",
+      "Song Quiz zenei időszak. Lehetséges válaszok: nyolcvanas, kilencvenes, kétezres, kétezer, kétezer tíz, kétezer húsz, kétezer huszonöt, tízes, húszas vagy vegyes. A kétezer és a kétezer húsz két különböző válasz; a húsz szót ne hagyd el.",
     genre:
-      "Song Quiz beállítás. A beszélő zenei műfajt mond, például pop, rock, hiphop, rap, elektronikus zene, jazz, metal vagy klasszikus zene.",
+      "Song Quiz beállítás. A beszélő egy vagy több zenei műfajt mond, például pop, rock, hiphop, rap, elektronikus zene, jazz, metal vagy klasszikus zene. Minden elhangzó műfajt őrizz meg, és több műfajt vesszővel válassz el.",
     player_count:
-      "Song Quiz beállítás. A beszélő egy és húsz közötti játékosszámot mond.",
+      "Song Quiz játékosszám. Lehetséges válaszok: egyedül, egy, ketten, kettő, hárman, három, négyen, négy, öten, öt, és így tovább húszig.",
     song_answer:
-      "Song Quiz megfejtés. A beszélő egy zenei előadót és egy dalcímet mondhat. Az előadó- és dalcímneveket pontosan írd át.",
+      "Song Quiz megfejtés. A beszélő magyar vagy angol nyelvű előadót és dalcímet mondhat. Az idegen neveket és az angol dalcímeket az eredeti nyelvükön írd át. Ne alakítsd őket hasonló hangzású magyar szavakká vagy mondattá.",
     replay_decision:
       "Song Quiz újrajátszási döntés. A beszélő arra válaszol, hogy szeretne-e új játékot. Várható szavak: igen, persze és nem.",
   },

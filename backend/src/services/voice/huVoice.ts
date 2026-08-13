@@ -90,6 +90,10 @@ function formatHungarianOrdinal(roundNumber: number | undefined): string {
   return `${prefix}${ending}`;
 }
 
+function formatHungarianPlayer(playerId: number | undefined): string {
+  return formatHungarianOrdinal(playerId).toLocaleLowerCase("hu-HU");
+}
+
 export const huVoiceLines: VoiceLineCatalog = {
   welcome_player_count:
     "Sziasztok! Üdvözöllek a Song Quizben! A játék kezdete előtt add meg, hányan szeretnétek játszani.",
@@ -99,9 +103,9 @@ export const huVoiceLines: VoiceLineCatalog = {
     "A játék egyszerű: minden játékosnak lejátszok egy részletet egy dalból. Amikor a dal véget ért, be kell mondani az előadót és a szám címét. Ha egyik sem jó, 0 pont. Ha csak az egyik jó, 10 pont. Ha mindkettő jó, 20 pont. Ha pedig tökéletes találat van, akkor 25 pont. Készen álltok? Akkor kezdjük!",
   game_starting_soon: "A játék hamarosan indul.",
   round_started: ({ roundNumber, playerId }) =>
-    `${formatHungarianOrdinal(roundNumber)} kör, Player ${playerId}, figyelj és találd el a zenét!`,
+    `${formatHungarianOrdinal(roundNumber)} kör, ${formatHungarianPlayer(playerId)} játékos, figyelj és találd el a zenét!`,
   next_player: ({ roundNumber, playerId }) =>
-    `${formatHungarianOrdinal(roundNumber)} kör, Player ${playerId}, te következel. Figyelj és találd el a zenét!`,
+    `${formatHungarianOrdinal(roundNumber)} kör, ${formatHungarianPlayer(playerId)} játékos, te következel. Figyelj és találd el a zenét!`,
   answer_none_correct: ({ correctArtist, correctTitle }) =>
     `Sajnos egyik sem talált. A helyes válasz: ${correctArtist}: ${correctTitle}.`,
   answer_artist_correct: ({ correctTitle, points }) =>
@@ -112,6 +116,8 @@ export const huVoiceLines: VoiceLineCatalog = {
     `Gratulálok, a válasz helyes. ${points} pontot kapsz. A tökéletes válasz ${correctArtist}: ${correctTitle} lett volna.`,
   answer_perfect: ({ points }) =>
     `Gratulálok! Tökéletes válasz! ${points} pontot kapsz!`,
+  answer_skipped: ({ correctArtist, correctTitle, points }) =>
+    `A helyes válasz ${correctArtist}: ${correctTitle}. ${points} pont.`,
   game_summary: ({ playerScores, winnerId, winnerIds }) => {
     const scoresText = playerScores
       ?.map((player) => `Player ${player.playerId} pontja: ${player.score}`)
@@ -126,14 +132,14 @@ export const huVoiceLines: VoiceLineCatalog = {
 
     return `A játék véget ért, ${scoresText}. ${winnerText}`;
   },
-  ask_play_again: "Szeretnétek új-játékot-kezdeni?",
-  game_paused: "A-játék-szünetel, folytatáshoz-csak-szólj, hogy folytassuk.",
-  game_stopped: "A-játék be-lett-fejezve, új-játék-indításához csak szólj.",
+  ask_play_again: "Szeretnétek új játékot kezdeni?",
+  game_paused: "A játék szünetel, folytatáshoz csak szólj, hogy folytassuk.",
+  game_stopped: "A játék be lett fejezve, új játék indításához csak szólj.",
   game_resumed: ({ roundNumber, playerId }) =>
-    `A-játék-folytatódik. ${formatHungarianOrdinal(roundNumber)} kör, Player ${playerId} következik.`,
+    `A játék folytatódik. ${formatHungarianOrdinal(roundNumber)} kör, ${formatHungarianPlayer(playerId)} játékos következik.`,
   restart_ask_decade:
-    "Új-játék-indul. Melyik évtizedből szeretnétek a zenéket?",
+    "Új játék indul. Melyik évtizedből szeretnétek a zenéket?",
   pass_hint:
-    "Ha-nem-tudod a választ, akkor-csak-mondd-hogy passz vagy kihagyom.",
-  setup_retry: "Nem-értettem, megismételnéd?",
+    "Ha nem tudod a választ, akkor csak mondd, hogy passz vagy kihagyom.",
+  setup_retry: "Nem értettem, megismételnéd?",
 };

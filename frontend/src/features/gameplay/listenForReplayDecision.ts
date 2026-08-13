@@ -1,22 +1,79 @@
 import { submitReplayDecision } from "../../api/replayApi";
 import { transcribeAudio } from "../../api/speechApi";
+import { playVoiceLine } from "../../api/voiceApi";
 import { recordAudio } from "../../audio/recordAudio";
+import {
+  INITIAL_SPEECH_TIMEOUT_MS,
+  SETUP_MAXIMUM_RECORDING_MS,
+  SETUP_SILENCE_AFTER_SPEECH_MS,
+} from "../../config/audioRecording";
 import type { GameLanguage } from "../../types/language";
 import type { ReplayDecisionResponse } from "../../types/replay";
-
-const REPLAY_RECORDING_DURATION_MS = 5000;
+import { saveGameLogEntry } from "../../services/gameLogStore";
 
 export async function listenForReplayDecision(
   language: GameLanguage,
+  signal?: AbortSignal,
 ): Promise<ReplayDecisionResponse> {
-  const audio = await recordAudio(REPLAY_RECORDING_DURATION_MS);
+  let repeatQuestion = false;
 
-  const transcript = await transcribeAudio(audio, {
-    context: "replay_decision",
-    language,
-  });
+  while (true) {
+    if (repeatQuestion) {
+      await playVoiceLine(language, "ask_play_again", signal);
+    }
 
-  const response = await submitReplayDecision(transcript);
+    const recording = await recordAudio({
+      initialSpeechTimeoutMs: INITIAL_SPEECH_TIMEOUT_MS,
+      maximumDurationMs: SETUP_MAXIMUM_RECORDING_MS,
+      signal,
+      silenceAfterSpeechMs: SETUP_SILENCE_AFTER_SPEECH_MS,
+    });
 
-  return response;
+    if (!recording.speechDetected || recording.audio === null) {
+      saveGameLogEntry({
+        accepted: false,
+        createdAt: new Date().toISOString(),
+        decision: null,
+        kind: "replay_decision",
+        transcript: "",
+      });
+
+      repeatQuestion = true;
+      continue;
+    }
+
+    const transcript = await transcribeAudio(recording.audio, {
+      context: "replay_decision",
+      language,
+      signal,
+    });
+
+    try {
+      const response = await submitReplayDecision(transcript, signal);
+
+      saveGameLogEntry({
+        accepted: true,
+        createdAt: new Date().toISOString(),
+        decision: response.result.decision,
+        kind: "replay_decision",
+        transcript,
+      });
+
+      return response;
+    } catch (error) {
+      if (signal?.aborted) {
+        throw error;
+      }
+
+      saveGameLogEntry({
+        accepted: false,
+        createdAt: new Date().toISOString(),
+        decision: null,
+        kind: "replay_decision",
+        transcript,
+      });
+
+      repeatQuestion = true;
+    }
+  }
 }

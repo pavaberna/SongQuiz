@@ -23,8 +23,12 @@ export function buildSongListResponseSchema(songCount: number) {
             type: "string",
           },
         },
+        popularityTier: {
+          type: "string",
+          enum: ["mainstream", "familiar", "discovery"],
+        },
       },
-      required: ["artist", "title", "year", "genres"],
+      required: ["artist", "title", "year", "genres", "popularityTier"],
     },
   };
 }

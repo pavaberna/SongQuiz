@@ -61,10 +61,10 @@ export function PlayingCoverAnimation({
           className={`song-neon-ring absolute rounded-full ${ring.size} ${isPlaying ? "song-ring-spin" : ""}`}
           style={{
             "--song-ring-color": ring.color,
+            "--song-ring-glow": ring.glow,
             animationDirection: ring.direction,
             animationDuration: ring.speed,
             animationPlayState: isPaused ? "paused" : "running",
-            filter: `drop-shadow(0 0 8px ${ring.glow})`,
           } as CSSProperties}
         />
       ))}

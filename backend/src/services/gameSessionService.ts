@@ -28,6 +28,7 @@ import {
 } from "./songListEnricher";
 import {
   CLIP_DURATION_SECONDS,
+  CLIP_START_END_MARGIN_SECONDS,
   LONG_VIDEO_THRESHOLD_SECONDS,
   LONG_VIDEO_MIN_START_OFFSET_SECONDS,
 } from "../config/songRules";
@@ -36,6 +37,8 @@ import type {
   JudgeSongAnswerResult,
   SubmitAnswerResult,
 } from "../types/answer";
+import { selectDiverseGameSongs } from "./songDiversityService";
+import { addCachedTracksToCurrentSongList } from "./songCacheFallbackService";
 
 export function createPlayers(playersCount: number): GamePlayer[] {
   const players: GamePlayer[] = [];
@@ -73,11 +76,16 @@ export async function createGameSessionFromCurrentSongList(): Promise<GameSessio
 
 export async function prepareGameSession(
   enrichmentLimit: number,
+  useCacheFallback = false,
 ): Promise<PrepareGameSessionResult> {
+  const startedAt = performance.now();
   const readiness = await getSongListReadiness();
 
   if (readiness.readyToStart) {
     const session = await createGameSessionFromCurrentSongList();
+    console.info(
+      `[timing] prepare game total=${Math.round(performance.now() - startedAt)}ms enrichment=skipped fallback=false`,
+    );
     return {
       ready: true,
       session,
@@ -85,11 +93,34 @@ export async function prepareGameSession(
     };
   }
 
-  const enrichment = await enrichSongsWithYoutubeData(enrichmentLimit);
-  const updatedReadiness = await getSongListReadiness();
+  const requiredEnrichmentCount = Math.min(
+    enrichmentLimit,
+    readiness.missingPlayableSongCount,
+  );
+  const enrichment = await enrichSongsWithYoutubeData(
+    requiredEnrichmentCount,
+  );
+  let updatedReadiness = await getSongListReadiness();
+
+  const shouldUseCacheFallback =
+    useCacheFallback || enrichment.youtubeQuotaExceeded;
+
+  if (!updatedReadiness.readyToStart && shouldUseCacheFallback) {
+    const cacheFallback = await addCachedTracksToCurrentSongList();
+
+    console.log(
+      `Cache fallback added ${cacheFallback.added} of ${cacheFallback.missingBeforeFallback} missing songs from ${cacheFallback.matchingCachedTracks} matching cached tracks.`,
+    );
+
+    updatedReadiness = await getSongListReadiness();
+  }
 
   if (updatedReadiness.readyToStart) {
     const session = await createGameSessionFromCurrentSongList();
+
+    console.info(
+      `[timing] prepare game total=${Math.round(performance.now() - startedAt)}ms enriched=${enrichment.enriched} cache=${enrichment.cacheHits} youtube=${enrichment.youtubeLookups} fallback=${shouldUseCacheFallback}`,
+    );
 
     return {
       ready: true,
@@ -97,6 +128,10 @@ export async function prepareGameSession(
       readiness: updatedReadiness,
     };
   }
+
+  console.info(
+    `[timing] prepare game total=${Math.round(performance.now() - startedAt)}ms enriched=${enrichment.enriched} cache=${enrichment.cacheHits} youtube=${enrichment.youtubeLookups} fallback=${shouldUseCacheFallback} ready=false`,
+  );
 
   return {
     ready: false,
@@ -257,6 +292,7 @@ export async function submitAnswer(
   }
 
   const currentRound = session.currentRound;
+  const skipped = isPassAnswer(answer);
 
   if (session.status === "finished") {
     throw new Error("This game is already finished.");
@@ -268,7 +304,7 @@ export async function submitAnswer(
 
   let judgeResult: JudgeSongAnswerResult;
 
-  if (isPassAnswer(answer)) {
+  if (skipped) {
     judgeResult = {
       artistCorrect: false,
       titleCorrect: false,
@@ -338,6 +374,7 @@ export async function submitAnswer(
     session,
     playerId: player.id,
     pointsAwarded: points,
+    skipped,
     judgeResult,
     correctAnswer: {
       artist: currentRound.currentSong.artist,
@@ -454,7 +491,7 @@ function calculateStartOffset(durationSeconds: number): number {
       ? LONG_VIDEO_MIN_START_OFFSET_SECONDS
       : 0;
 
-  const maxStartOffset = durationSeconds - CLIP_DURATION_SECONDS;
+  const maxStartOffset = durationSeconds - CLIP_START_END_MARGIN_SECONDS;
 
   if (maxStartOffset < minStartOffset) {
     throw new Error(
@@ -533,20 +570,95 @@ function selectGameSongs(currentSongList: CurrentSongListFile): GameSong[] {
       `Not enough playable songs. Required: ${currentSongList.targetSongCount}, available: ${playableSongs.length}.`,
     );
   }
-  const selectedSongs = playableSongs.slice(0, currentSongList.targetSongCount);
-  const gameSongs: GameSong[] = selectedSongs.map((song) => ({
+  const gameSongs: GameSong[] = playableSongs.map((song) => ({
     ...song,
     played: false,
   }));
-  return gameSongs;
+
+  return selectDiverseGameSongs(
+    gameSongs,
+    currentSongList.targetSongCount,
+  );
 }
 
 function isPassAnswer(rawAnswer: string): boolean {
-  const words = normalizeSpokenWords(rawAnswer);
+  const answer = normalizeSpokenWords(rawAnswer).join(" ");
+  const compactAnswer = answer.replaceAll(" ", "");
+  const passCommands = [
+    "pass",
+    "skip",
+    "passz",
+    "kihagyom",
+    "nem tudom",
+    "nemtodon",
+    "fogalmam sincs",
+    "ötletem sincs",
+    "otletem sincs",
+    "dont know",
+    "don't know",
+    "i dont know",
+    "i don't know",
+  ];
 
-  const passCommands = ["pass", "skip", "passz", "kihagyom"];
+  return passCommands.some((command) => {
+    const compactCommand = command.replaceAll(" ", "");
 
-  return passCommands.some((command) => words.includes(command));
+    return (
+      answer === command ||
+      answer.includes(command) ||
+      differsByAtMostOneCharacter(compactAnswer, compactCommand)
+    );
+  });
+}
+
+function differsByAtMostOneCharacter(
+  firstText: string,
+  secondText: string,
+): boolean {
+  if (Math.abs(firstText.length - secondText.length) > 1) {
+    return false;
+  }
+
+  if (firstText.length === secondText.length) {
+    let differenceCount = 0;
+
+    for (let index = 0; index < firstText.length; index++) {
+      if (firstText[index] !== secondText[index]) {
+        differenceCount++;
+      }
+
+      if (differenceCount > 1) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  const shorterText =
+    firstText.length < secondText.length ? firstText : secondText;
+  const longerText =
+    firstText.length < secondText.length ? secondText : firstText;
+  let shorterIndex = 0;
+  let longerIndex = 0;
+  let skippedCharacterCount = 0;
+
+  while (shorterIndex < shorterText.length && longerIndex < longerText.length) {
+    if (shorterText[shorterIndex] === longerText[longerIndex]) {
+      shorterIndex++;
+      longerIndex++;
+      continue;
+    }
+
+    skippedCharacterCount++;
+    longerIndex++;
+
+    if (skippedCharacterCount > 1) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function createLeaderboard(players: GamePlayer[]): GameLeaderboardEntry[] {

@@ -1,9 +1,36 @@
 import type { GenerateSongListParams } from "../types/song";
+import type { PopularityTierCounts } from "../services/songDiversityService";
 
 type BuildSongListPromptParams = GenerateSongListParams & {
+  curationFocus: string;
+  excludedSongs: { artist: string; title: string }[];
   generatedSongCount: number;
   hungarianSongCount: number;
+  popularityTierCounts: PopularityTierCounts;
+  requestedGenres: string[];
+  variationId: string;
 };
+
+function buildGenreRules(params: BuildSongListPromptParams): string {
+  const requestedGenres = params.requestedGenres.join(", ");
+
+  if (params.requestedGenres.length === 1) {
+    return `
+Genre rules:
+- Every song must genuinely belong to the requested genre: ${requestedGenres}.
+- A related subgenre is allowed only when the song still clearly belongs to ${requestedGenres}.
+- Include "${requestedGenres}" in every song's genres array.`;
+  }
+
+  return `
+Genre intersection rules (critical):
+- The requested genres are: ${requestedGenres}.
+- Treat these genres as an AND condition, never as alternatives.
+- Every song must genuinely combine every requested genre.
+- Reject songs that match only one or some of the requested genres.
+- Do not substitute a requested genre with a merely related genre.
+- Every song's genres array must explicitly contain all requested genres. Additional accurate genres are allowed.`;
+}
 
 function buildSongOriginRules(params: BuildSongListPromptParams): string {
   if (params.hungarianSongCount === params.generatedSongCount) {
@@ -41,12 +68,21 @@ function buildSongOriginRules(params: BuildSongListPromptParams): string {
 }
 
 export function buildSongListPrompt(params: BuildSongListPromptParams): string {
+  const excludedSongsText =
+    params.excludedSongs.length === 0
+      ? "- No songs are excluded from this request."
+      : params.excludedSongs
+          .map((song) => `- ${song.artist} - ${song.title}`)
+          .join("\n");
+
   return `
 You are an expert music curator for a song quiz app played specifically by Hungarian users.
 
 Create exactly ${params.generatedSongCount} real, existing songs matching this setup:
 - Decade: ${params.decade}
-- Genre: ${params.genre}
+- Requested genres: ${params.requestedGenres.join(", ")}
+- Curation focus: ${params.curationFocus}
+- Variation ID: ${params.variationId}
 
 Return only a valid JSON array. Do not wrap the response in markdown code blocks. Start directly with "[" and end with "]". No explanations.
 
@@ -55,22 +91,37 @@ Each item must have exactly this shape:
   "artist": "Artist name",
   "title": "Song title",
   "year": 1999,
-  "genres": ["genre1", "genre2"]
+  "genres": ["genre1", "genre2"],
+  "popularityTier": "mainstream"
 }
 
 Selection and cultural relevance rules (critical for Hungarian players):
+${buildGenreRules(params)}
+
 ${buildSongOriginRules(params)}
 
 3. Strict exclusions:
    - Do not include local stars from other countries who are unknown to Hungarian audiences, even if they have millions of views in their home countries.
    - Every international song must be culturally recognizable to an average Hungarian music listener.
 
+4. Popularity diversity:
+   - Include exactly ${params.popularityTierCounts.mainstream} mainstream songs: major hits with very high YouTube reach and broad recognition in Hungary.
+   - Include exactly ${params.popularityTierCounts.familiar} familiar songs: established songs with meaningful reach that are recognizable but are not the most predictable chart leaders.
+   - Include exactly ${params.popularityTierCounts.discovery} discovery songs: lower-view, cult, local, alternative, or overlooked songs that still have a real audience in Hungary.
+   - A discovery song must never be an obscure regional hit that is unknown in Hungary.
+   - Set popularityTier to "mainstream", "familiar", or "discovery" according to these definitions.
+   - Do not sort the output by popularity, artist, title, or year. Mix all three tiers throughout the array.
+
+5. Recently generated songs that must not be returned:
+${excludedSongsText}
+
 General rules:
 - Return exactly ${params.generatedSongCount} items.
 - Do not include duplicate songs.
+- Do not repeatedly default to the most obvious artist or song for this decade and genre.
+- Vary artists: avoid using the same artist more than once unless the requested pool would otherwise be too small.
 - Use real, existing songs only.
 - The year must match the requested decade.
-- The genres must match or be closely related to the requested genre.
 - The artist field must include every officially credited primary, co-primary, and featured artist. Never omit collaborating artists or shorten a multi-artist credit to only the first artist.
 
 Strict Accuracy Constraint:

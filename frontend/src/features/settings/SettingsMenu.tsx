@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react";
+import { Download, Settings, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -10,6 +10,11 @@ import type {
   GameSettings,
   HungarianSongMode,
 } from "../../types/settings";
+import {
+  clearGameLog,
+  downloadGameLog,
+  readGameLog,
+} from "../../services/gameLogStore";
 
 type SettingsMenuProps = {
   disabled?: boolean;
@@ -21,21 +26,27 @@ type SettingsMenuProps = {
 const textByLanguage = {
   hu: {
     foreignOnly: "Kikapcsolva",
+    clearLog: "Napló törlése",
+    downloadLog: "Napló letöltése",
     hungarianOnly: "Mind",
     mixed: "Vegyes",
     musicOrigin: "Magyar zenék",
     playRules: "Játékszabályok felolvasása",
     settings: "Beállítások",
     songsPerPlayer: "Dalok játékosonként",
+    testLog: "Tesztelési napló",
   },
   en: {
     foreignOnly: "Off",
+    clearLog: "Clear log",
+    downloadLog: "Download log",
     hungarianOnly: "All",
     mixed: "Mixed",
     musicOrigin: "Hungarian songs",
     playRules: "Read the game rules",
     settings: "Settings",
     songsPerPlayer: "Songs per player",
+    testLog: "Test log",
   },
 };
 
@@ -46,6 +57,7 @@ export function SettingsMenu({
   settings,
 }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [logEntryCount, setLogEntryCount] = useState(readGameLog().length);
   const text = textByLanguage[language];
 
   const songModeOptions: Array<{
@@ -69,7 +81,10 @@ export function SettingsMenu({
       <button
         className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-neutral-800 bg-neutral-950/80 text-neutral-200 shadow-inner transition-colors hover:border-fuchsia-400/60 hover:text-fuchsia-200 focus:border-fuchsia-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-400/20 disabled:cursor-not-allowed disabled:opacity-40"
         disabled={disabled}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        onClick={() => {
+          setLogEntryCount(readGameLog().length);
+          setIsOpen((currentValue) => !currentValue);
+        }}
         title={text.settings}
         type="button"
       >
@@ -161,6 +176,42 @@ export function SettingsMenu({
               type="checkbox"
             />
           </label>
+
+          <div className="mt-5 border-t border-neutral-800 pt-4">
+            <div className="mb-3 flex items-center justify-between gap-4">
+              <p className="text-sm font-bold text-neutral-200">
+                {text.testLog}
+              </p>
+              <span className="text-xs font-bold text-neutral-500">
+                {logEntryCount}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                className="flex min-h-10 items-center justify-center gap-2 rounded-control border border-cyan-400/40 bg-cyan-500/10 px-3 text-xs font-bold text-cyan-100 transition-colors hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={logEntryCount === 0}
+                onClick={downloadGameLog}
+                type="button"
+              >
+                <Download className="h-4 w-4" />
+                {text.downloadLog}
+              </button>
+
+              <button
+                className="flex min-h-10 items-center justify-center gap-2 rounded-control border border-rose-400/40 bg-rose-500/10 px-3 text-xs font-bold text-rose-100 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={logEntryCount === 0}
+                onClick={() => {
+                  clearGameLog();
+                  setLogEntryCount(0);
+                }}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+                {text.clearLog}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

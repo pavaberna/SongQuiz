@@ -9,11 +9,12 @@ import { API_BASE_URL } from "./apiConfig";
 export async function prepareGameSession(
   enrichmentLimit: number,
   signal?: AbortSignal,
+  useCacheFallback = false,
 ): Promise<PrepareGameSessionResponse> {
   const url = new URL("/api/dev/prepare-game-session", API_BASE_URL);
 
   const response = await fetch(url, {
-    body: JSON.stringify({ enrichmentLimit }),
+    body: JSON.stringify({ enrichmentLimit, useCacheFallback }),
     headers: {
       "Content-Type": "application/json",
     },
