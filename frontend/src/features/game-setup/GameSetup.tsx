@@ -57,9 +57,11 @@ export function GameSetup({
   language,
   onCommand,
   onLanguageChange,
+  onSettingsChange,
   onStart,
   players,
   setupStatus,
+  settings,
 }: GameSetupProps) {
   const text = textByLanguage[language];
   const isBusy = setupStatus !== "idle";
@@ -92,8 +94,11 @@ export function GameSetup({
           ) : undefined
         }
         isLanguageLocked={isSetupActive}
+        isSettingsLocked={isSetupActive}
         language={language}
         onLanguageChange={onLanguageChange}
+        onSettingsChange={onSettingsChange}
+        settings={settings}
       />
 
       <section className="song-fade-in relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-9 py-10 text-center">

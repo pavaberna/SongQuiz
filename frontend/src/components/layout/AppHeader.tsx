@@ -1,15 +1,20 @@
 import { Radio } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { SettingsMenu } from "../../features/settings/SettingsMenu";
 import type { GameLanguage } from "../../types/language";
+import type { GameSettings } from "../../types/settings";
 import { FlagIcon, type FlagCountry } from "../ui/FlagIcon";
 import { Select, type SelectOption } from "../ui/Select";
 
 type AppHeaderProps = {
   centerContent?: ReactNode;
   isLanguageLocked?: boolean;
+  isSettingsLocked?: boolean;
   language: GameLanguage;
   onLanguageChange?: (language: GameLanguage) => void;
+  onSettingsChange: (settings: GameSettings) => void;
+  settings: GameSettings;
 };
 
 const languageOptions: readonly SelectOption[] = [
@@ -36,8 +41,11 @@ const languageDetails: Record<
 export function AppHeader({
   centerContent,
   isLanguageLocked = false,
+  isSettingsLocked = false,
   language,
   onLanguageChange,
+  onSettingsChange,
+  settings,
 }: AppHeaderProps) {
   const selectedLanguage = languageDetails[language];
 
@@ -48,7 +56,7 @@ export function AppHeader({
           <Radio className="h-5 w-5 text-cyan-300" />
         </div>
 
-        <p className="bg-gradient-to-r from-fuchsia-300 via-purple-200 to-cyan-300 bg-clip-text text-lg font-black tracking-[0.24em] text-transparent">
+        <p className="bg-gradient-to-r from-fuchsia-300 via-purple-200 to-cyan-300 bg-clip-text text-sm font-black tracking-[0.1em] text-transparent sm:text-lg sm:tracking-[0.24em]">
           SONG QUIZ
         </p>
       </div>
@@ -59,22 +67,33 @@ export function AppHeader({
         </div>
       )}
 
-      <div className="w-40 justify-self-end md:col-start-3 md:row-start-1">
-        {isLanguageLocked || !onLanguageChange ? (
-          <div className="flex h-11 w-full items-center gap-2 rounded-full border border-neutral-800 bg-neutral-950/80 px-4 text-sm font-semibold text-foreground shadow-inner">
-            <FlagIcon country={selectedLanguage.country} />
-            <span>{selectedLanguage.label}</span>
-          </div>
-        ) : (
-          <Select
-            id="language"
-            onValueChange={(value) =>
-              onLanguageChange(value as GameLanguage)
-            }
-            options={languageOptions}
-            value={language}
-          />
-        )}
+      <div className="flex justify-self-end gap-2 md:col-start-3 md:row-start-1">
+        <div className="w-12 sm:w-40">
+          {isLanguageLocked || !onLanguageChange ? (
+            <div className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-neutral-800 bg-neutral-950/80 px-3 text-sm font-semibold text-foreground shadow-inner sm:justify-start sm:px-4">
+              <FlagIcon country={selectedLanguage.country} />
+              <span className="hidden sm:inline">{selectedLanguage.label}</span>
+            </div>
+          ) : (
+            <Select
+              compactOnMobile
+              id="language"
+              onValueChange={(value) =>
+                onLanguageChange(value as GameLanguage)
+              }
+              options={languageOptions}
+              value={language}
+            />
+          )}
+        </div>
+
+        <SettingsMenu
+          disabled={isSettingsLocked}
+          key={isSettingsLocked ? "settings-locked" : "settings-unlocked"}
+          language={language}
+          onChange={onSettingsChange}
+          settings={settings}
+        />
       </div>
     </header>
   );

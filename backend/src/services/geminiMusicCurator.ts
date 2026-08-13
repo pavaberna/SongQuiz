@@ -1,7 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import {
   SONG_GENERATION_BUFFER_MULTIPLIER,
-  SONGS_PER_PLAYER,
   MAX_HUNGARIAN_SONG_RATIO,
   MIN_HUNGARIAN_SONG_RATIO,
 } from "../config/songRules";
@@ -11,7 +10,18 @@ import { buildSongListResponseSchema } from "../schemas/songListSchema";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
-function getRandomHungarianSongCount(totalSongCount: number): number {
+function getHungarianSongCount(
+  totalSongCount: number,
+  mode: GenerateSongListParams["hungarianSongMode"],
+): number {
+  if (mode === "hungarian_only") {
+    return totalSongCount;
+  }
+
+  if (mode === "foreign_only") {
+    return 0;
+  }
+
   const minimumCount = Math.max(
     1,
     Math.round(totalSongCount * MIN_HUNGARIAN_SONG_RATIO),
@@ -40,11 +50,14 @@ export async function generateSongList(
     throw new Error("Invalid number of players.");
   }
 
-  const targetSongCount = params.players * SONGS_PER_PLAYER;
+  const targetSongCount = params.players * params.songsPerPlayer;
   const generatedSongCount = Math.ceil(
     targetSongCount * SONG_GENERATION_BUFFER_MULTIPLIER,
   );
-  const hungarianSongCount = getRandomHungarianSongCount(generatedSongCount);
+  const hungarianSongCount = getHungarianSongCount(
+    generatedSongCount,
+    params.hungarianSongMode,
+  );
 
   const ai = new GoogleGenAI({ apiKey });
   const prompt = buildSongListPrompt({

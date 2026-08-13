@@ -5,7 +5,6 @@ import type {
   GeneratedSong,
   GenerateSongListParams,
 } from "../types/song";
-import { SONGS_PER_PLAYER } from "../config/songRules";
 
 const runtimeDir = path.join(process.cwd(), "runtime");
 const currentSongListPath = path.join(runtimeDir, "current-song-list.json");
@@ -18,7 +17,7 @@ export async function saveCurrentSongList(
 
   const fileContent: CurrentSongListFile = {
     generatedAt: new Date().toISOString(),
-    targetSongCount: request.players * SONGS_PER_PLAYER,
+    targetSongCount: request.players * request.songsPerPlayer,
     generatedSongCount: songs.length,
     request,
     songs: songs.map((song) => ({

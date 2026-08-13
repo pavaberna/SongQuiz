@@ -50,8 +50,14 @@ import {
   createResumeVoiceInstruction,
 } from "./services/voice/gameVoiceService";
 import { MAX_PLAYERS, MIN_PLAYERS } from "./config/gameRules";
+import {
+  MAX_SONGS_PER_PLAYER,
+  MIN_SONGS_PER_PLAYER,
+  SONGS_PER_PLAYER,
+} from "./config/songRules";
 import { transcriptionContexts } from "./types/speech";
 import type { TranscriptionContext } from "./types/speech";
+import type { HungarianSongMode } from "./types/song";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -80,6 +86,13 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
       typeof req.body.genre === "string" ? req.body.genre.trim() : "";
     const rawLanguage =
       typeof req.body.language === "string" ? req.body.language.trim() : "hu";
+    const songsPerPlayer = Number(
+      req.body.songsPerPlayer ?? SONGS_PER_PLAYER,
+    );
+    const rawHungarianSongMode =
+      typeof req.body.hungarianSongMode === "string"
+        ? req.body.hungarianSongMode.trim()
+        : "mixed";
 
     if (rawLanguage !== "hu" && rawLanguage !== "en") {
       res.status(400).json({ error: "language must be 'hu' or 'en'." });
@@ -87,6 +100,34 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
     }
 
     const language = rawLanguage;
+
+    if (
+      !Number.isInteger(songsPerPlayer) ||
+      songsPerPlayer < MIN_SONGS_PER_PLAYER ||
+      songsPerPlayer > MAX_SONGS_PER_PLAYER
+    ) {
+      res.status(400).json({
+        error: `songsPerPlayer must be an integer between ${MIN_SONGS_PER_PLAYER} and ${MAX_SONGS_PER_PLAYER}.`,
+      });
+      return;
+    }
+
+    const hungarianSongModes: HungarianSongMode[] = [
+      "hungarian_only",
+      "mixed",
+      "foreign_only",
+    ];
+
+    if (
+      !hungarianSongModes.includes(
+        rawHungarianSongMode as HungarianSongMode,
+      )
+    ) {
+      res.status(400).json({ error: "Invalid hungarianSongMode." });
+      return;
+    }
+
+    const hungarianSongMode = rawHungarianSongMode as HungarianSongMode;
 
     if (
       !Number.isInteger(players) ||
@@ -104,7 +145,14 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
       return;
     }
 
-    const request = { players, decade, genre, language };
+    const request = {
+      players,
+      decade,
+      genre,
+      language,
+      hungarianSongMode,
+      songsPerPlayer,
+    };
     const songs = await generateSongList(request);
     const savedSongList = await saveCurrentSongList(request, songs);
 

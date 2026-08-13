@@ -7,6 +7,7 @@ export type StaticVoiceLineKey =
   | "ask_decade"
   | "ask_genre"
   | "explain_rules"
+  | "game_starting_soon"
   | "setup_retry"
   | "ask_play_again"
   | "restart_ask_decade"

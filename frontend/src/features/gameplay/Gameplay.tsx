@@ -66,6 +66,8 @@ export function Gameplay({
   onGameEnd,
   onReplay,
   onRoundChange,
+  onSettingsChange,
+  settings,
 }: GameplayProps) {
   const text = textByLanguage[language];
   const [answerResponse, setAnswerResponse] =
@@ -278,7 +280,10 @@ export function Gameplay({
           )
         }
         isLanguageLocked
+        isSettingsLocked={phase !== "finished"}
         language={language}
+        onSettingsChange={onSettingsChange}
+        settings={settings}
       />
 
       <section className="song-fade-in flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-5 self-center py-6">

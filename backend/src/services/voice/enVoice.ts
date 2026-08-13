@@ -7,6 +7,7 @@ export const enVoiceLines: VoiceLineCatalog = {
   ask_genre: "Which genre should the songs be from?",
   explain_rules:
     "The game is simple: I will play each player a short part of a song. When the song ends, say the artist and the song title. If neither is correct, you get 0 points. If one is correct, you get 10 points. If both are correct, you get 20 points. If it is a perfect answer, you get 25 points. Are you ready? Let's start!",
+  game_starting_soon: "The game will start shortly.",
   round_started: ({ roundNumber, playerId }) =>
     `Round ${roundNumber}, Player ${playerId}, listen carefully and guess the song!`,
   next_player: ({ roundNumber, playerId }) =>

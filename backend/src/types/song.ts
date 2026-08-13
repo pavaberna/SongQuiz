@@ -1,10 +1,17 @@
 import { GameLanguage } from "./language";
 
+export type HungarianSongMode =
+  | "hungarian_only"
+  | "mixed"
+  | "foreign_only";
+
 export type GenerateSongListParams = {
   players: number;
   decade: string;
   genre: string;
   language?: GameLanguage;
+  hungarianSongMode: HungarianSongMode;
+  songsPerPlayer: number;
 };
 
 export type GeneratedSong = {

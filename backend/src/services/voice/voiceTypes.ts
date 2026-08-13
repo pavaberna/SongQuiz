@@ -3,6 +3,7 @@ export const voiceLineKeys = [
   "ask_decade",
   "ask_genre",
   "explain_rules",
+  "game_starting_soon",
   "round_started",
   "next_player",
   "answer_none_correct",

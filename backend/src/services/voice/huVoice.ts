@@ -97,6 +97,7 @@ export const huVoiceLines: VoiceLineCatalog = {
   ask_genre: "Milyen műfajból legyenek a zenék?",
   explain_rules:
     "A játék egyszerű: minden játékosnak lejátszok egy részletet egy dalból. Amikor a dal véget ért, be kell mondani az előadót és a szám címét. Ha egyik sem jó, 0 pont. Ha csak az egyik jó, 10 pont. Ha mindkettő jó, 20 pont. Ha pedig tökéletes találat van, akkor 25 pont. Készen álltok? Akkor kezdjük!",
+  game_starting_soon: "A játék hamarosan indul.",
   round_started: ({ roundNumber, playerId }) =>
     `${formatHungarianOrdinal(roundNumber)} kör, Player ${playerId}, figyelj és találd el a zenét!`,
   next_player: ({ roundNumber, playerId }) =>

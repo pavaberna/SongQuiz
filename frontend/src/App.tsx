@@ -24,6 +24,8 @@ import { saveGameLogEntry } from "./services/gameLogStore";
 import type { GameCommand } from "./types/gameCommand";
 import { sendGameCommand } from "./api/gameCommandApi";
 import { AppLayout } from "./components/layout/AppLayout";
+import { DEFAULT_GAME_SETTINGS } from "./config/gameSettings";
+import type { GameSettings } from "./types/settings";
 
 function isSetupCancelled(error: unknown): boolean {
   return (
@@ -35,6 +37,7 @@ function isSetupCancelled(error: unknown): boolean {
 
 function App() {
   const [language, setLanguage] = useState<GameLanguage>("hu");
+  const [settings, setSettings] = useState<GameSettings>(DEFAULT_GAME_SETTINGS);
   const [setupStatus, setSetupStatus] = useState<GameSetupStatus>("idle");
   const [isSetupActive, setIsSetupActive] = useState(false);
   const [isSetupPaused, setIsSetupPaused] = useState(false);
@@ -100,8 +103,10 @@ function App() {
       {
         decade: trimmedDecade,
         genre: trimmedGenre,
+        hungarianSongMode: settings.hungarianSongMode,
         language,
         players: playerCount,
+        songsPerPlayer: settings.songsPerPlayer,
       },
       signal,
     ).then((response) => {
@@ -110,15 +115,19 @@ function App() {
       return prepareGame(response.count, signal);
     });
 
+    const preparationVoiceLineKey: StaticVoiceLineKey = settings.playRules
+      ? "explain_rules"
+      : "game_starting_soon";
+
     setIsVoicePlaying(true);
 
-    const rulesVoicePromise = playVoiceLine(
+    const preparationVoicePromise = playVoiceLine(
       language,
-      "explain_rules",
+      preparationVoiceLineKey,
       signal,
     ).finally(() => setIsVoicePlaying(false));
 
-    const [session] = await Promise.all([gamePromise, rulesVoicePromise]);
+    const [session] = await Promise.all([gamePromise, preparationVoicePromise]);
 
     setGameSessionId(session.id);
 
@@ -292,13 +301,15 @@ function App() {
   return (
     <AppLayout language={language}>
       {currentRound !== null ? (
-      <Gameplay
-        currentRound={currentRound}
-        language={language}
-        onGameEnd={handleGameEnd}
-        onReplay={handleReplay}
-        onRoundChange={setCurrentRound}
-      />
+        <Gameplay
+          currentRound={currentRound}
+          language={language}
+          onGameEnd={handleGameEnd}
+          onReplay={handleReplay}
+          onRoundChange={setCurrentRound}
+          onSettingsChange={setSettings}
+          settings={settings}
+        />
       ) : (
         <GameSetup
           errorMessage={startError}
@@ -308,13 +319,15 @@ function App() {
           language={language}
           onCommand={handleSetupCommand}
           onLanguageChange={setLanguage}
+          onSettingsChange={setSettings}
           onStart={handleStart}
           setupStatus={setupStatus}
-      transcript={transcript}
-      players={players}
-      decade={decade}
-      genre={genre}
-    />
+          transcript={transcript}
+          players={players}
+          decade={decade}
+          genre={genre}
+          settings={settings}
+        />
       )}
     </AppLayout>
   );
