@@ -5,6 +5,26 @@ import type {
 } from "../types/audio";
 
 const AUDIO_MIME_TYPE = "audio/webm";
+let recordingAudioContext: AudioContext | null = null;
+
+function getRecordingAudioContext(): AudioContext {
+  if (
+    recordingAudioContext === null ||
+    recordingAudioContext.state === "closed"
+  ) {
+    recordingAudioContext = new AudioContext();
+  }
+
+  return recordingAudioContext;
+}
+
+export function unlockAudioRecording(): void {
+  const audioContext = getRecordingAudioContext();
+
+  if (audioContext.state === "suspended") {
+    void audioContext.resume().catch(() => undefined);
+  }
+}
 
 export async function recordAudio(
   options: RecordAudioOptions,
@@ -40,7 +60,7 @@ export async function recordAudio(
     const recorder = new MediaRecorder(stream, {
       mimeType: AUDIO_MIME_TYPE,
     });
-    const audioContext = new AudioContext();
+    const audioContext = getRecordingAudioContext();
     const source = audioContext.createMediaStreamSource(stream);
     const analyser = audioContext.createAnalyser();
     const audioSamples = new Uint8Array(analyser.fftSize);
@@ -73,7 +93,8 @@ export async function recordAudio(
         }
 
         signal?.removeEventListener("abort", handleAbort);
-        void audioContext.close();
+        source.disconnect();
+        analyser.disconnect();
       }
 
       function getCurrentAudioLevel(): number {

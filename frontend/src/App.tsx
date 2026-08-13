@@ -28,6 +28,7 @@ import { sendGameCommand } from "./api/gameCommandApi";
 import { AppLayout } from "./components/layout/AppLayout";
 import { DEFAULT_GAME_SETTINGS } from "./config/gameSettings";
 import type { GameSettings } from "./types/settings";
+import { unlockAudioRecording } from "./audio/recordAudio";
 
 function isSetupCancelled(error: unknown): boolean {
   return (
@@ -213,6 +214,8 @@ function App() {
   }
 
   async function handleStart() {
+    unlockAudioRecording();
+
     const setupController = new AbortController();
     setupAbortControllerRef.current?.abort();
     setupAbortControllerRef.current = setupController;
