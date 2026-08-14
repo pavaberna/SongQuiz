@@ -21,6 +21,7 @@ services:
       dockerfile: Dockerfile
       target: runner
     environment:
+      ADMIN_GOOGLE_EMAILS: ${ADMIN_GOOGLE_EMAILS:?ADMIN_GOOGLE_EMAILS is required}
       ALLOWED_GOOGLE_EMAILS: ${ALLOWED_GOOGLE_EMAILS:?ALLOWED_GOOGLE_EMAILS is required}
       AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?AUTH_SESSION_SECRET is required}
       DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public

@@ -115,6 +115,7 @@ export function AppHeader({
 
         <SettingsMenu
           disabled={isSettingsLocked}
+          isAdmin={user?.isAdmin ?? false}
           key={isSettingsLocked ? "settings-locked" : "settings-unlocked"}
           language={language}
           onChange={onSettingsChange}

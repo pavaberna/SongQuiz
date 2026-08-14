@@ -2,12 +2,12 @@ import type { AnswerJudgeResult } from "./answer";
 
 export type GameLogEntry =
   | {
-      accepted: boolean;
+      accepted: false;
       createdAt: string;
       kind: "setup_transcript";
       context: "player_count" | "decade" | "genre";
       transcript: string;
-      parsedValue: number | string | null;
+      parsedValue: null;
     }
   | {
       createdAt: string;
@@ -22,9 +22,23 @@ export type GameLogEntry =
       judgeResult: AnswerJudgeResult;
     }
   | {
-      accepted: boolean;
+      accepted: false;
       createdAt: string;
-      decision: "replay" | "end" | null;
+      decision: null;
       kind: "replay_decision";
       transcript: string;
+    }
+  | {
+      createdAt: string;
+      kind: "error";
+      message: string;
+      source: string;
     };
+
+export type GameLogUserSummary = {
+  email: string;
+  entryCount: number;
+  lastEntryAt: string | null;
+  name: string | null;
+  userStorageKey: string;
+};

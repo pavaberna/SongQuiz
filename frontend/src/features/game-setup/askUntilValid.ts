@@ -40,21 +40,21 @@ export async function askUntilValid<T extends number | string>({
 
     const value = parseAnswer(transcript);
 
-    saveGameLogEntry({
-      accepted: value !== null,
-      context: transcriptionContext,
-      createdAt: new Date().toISOString(),
-      kind: "setup_transcript",
-      parsedValue: value,
-      transcript,
-    });
-
     if (value !== null) {
       return {
         transcript,
         value,
       };
     }
+
+    saveGameLogEntry({
+      accepted: false,
+      context: transcriptionContext,
+      createdAt: new Date().toISOString(),
+      kind: "setup_transcript",
+      parsedValue: null,
+      transcript,
+    });
 
     currentVoiceLineKey = "setup_retry";
   }

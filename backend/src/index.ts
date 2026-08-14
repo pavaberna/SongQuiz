@@ -76,6 +76,16 @@ import {
   requireAuth,
   restoreAuthenticatedUserContext,
 } from "./middleware/requireAuth";
+import { logApiErrors } from "./middleware/logApiErrors";
+import {
+  appendGameLogEntry,
+  clearGameLogForUser,
+  readGameLogForUser,
+} from "./services/gameLogStore";
+import { isGameLogEntry } from "./services/gameLogService";
+import { requireAdmin } from "./middleware/requireAdmin";
+import { saveUserProfile } from "./services/userProfileStore";
+import { getGameLogUserSummaries } from "./services/adminGameLogService";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -126,6 +136,7 @@ app.post("/api/auth/google", async (req, res) => {
     const user = await authenticateGoogleCredential(credential);
     const sessionToken = createAuthSessionToken(user);
 
+    await saveUserProfile(user);
     res.cookie(AUTH_COOKIE_NAME, sessionToken, getAuthCookieOptions());
     res.json({ user });
   } catch (error) {
@@ -139,8 +150,14 @@ app.post("/api/auth/google", async (req, res) => {
   }
 });
 
-app.get("/api/auth/me", requireAuth, (req, res) => {
-  res.json({ user: res.locals.authUser });
+app.get("/api/auth/me", requireAuth, async (_req, res) => {
+  try {
+    await saveUserProfile(res.locals.authUser);
+    res.json({ user: res.locals.authUser });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
 });
 
 app.post("/api/auth/logout", (req, res) => {
@@ -155,7 +172,76 @@ app.post("/api/auth/logout", (req, res) => {
   res.status(204).send();
 });
 
-app.use("/api/dev", requireAuth);
+app.use("/api/dev", requireAuth, logApiErrors);
+
+app.get("/api/dev/admin/test-logs", requireAdmin, async (_req, res) => {
+  try {
+    const users = await getGameLogUserSummaries();
+
+    res.json({ users });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/dev/test-log", async (req, res) => {
+  try {
+    if (!isGameLogEntry(req.body.entry)) {
+      res.status(400).json({ error: "The test log entry is invalid." });
+      return;
+    }
+
+    await appendGameLogEntry(req.body.entry);
+    res.status(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get(
+  "/api/dev/admin/test-logs/:userStorageKey",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const userStorageKey = req.params.userStorageKey;
+
+      if (typeof userStorageKey !== "string") {
+        res.status(400).json({ error: "The user storage key is required." });
+        return;
+      }
+
+      const entries = await readGameLogForUser(userStorageKey);
+
+      res.json({ count: entries.length, entries });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: message });
+    }
+  },
+);
+
+app.delete(
+  "/api/dev/admin/test-logs/:userStorageKey",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const userStorageKey = req.params.userStorageKey;
+
+      if (typeof userStorageKey !== "string") {
+        res.status(400).json({ error: "The user storage key is required." });
+        return;
+      }
+
+      await clearGameLogForUser(userStorageKey);
+      res.status(204).send();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: message });
+    }
+  },
+);
 
 app.post("/api/dev/gemini-songs", async (req, res) => {
   try {

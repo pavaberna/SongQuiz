@@ -5,6 +5,7 @@ import { TimedProgressBar } from "../../components/ui/TimedProgressBar";
 import { PlayingCoverAnimation } from "./PlayingCoverAnimation";
 
 const AUTOPLAY_CHECK_DELAY_MS = 2000;
+const COMPLETION_TOLERANCE_MS = 2000;
 
 export function SongPlayer({
   clipDuration,
@@ -17,6 +18,9 @@ export function SongPlayer({
   manualPlayText,
 }: SongPlayerProps) {
   const autoplayTimerRef = useRef<number | null>(null);
+  const activePlaybackKeyRef = useRef<string | null>(null);
+  const completedPlaybackKeyRef = useRef<string | null>(null);
+  const playbackStartedAtRef = useRef<number | null>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
   const [activePlaybackKey, setActivePlaybackKey] = useState<string | null>(
     null,
@@ -30,6 +34,9 @@ export function SongPlayer({
         window.clearTimeout(autoplayTimerRef.current);
       }
 
+      activePlaybackKeyRef.current = null;
+      completedPlaybackKeyRef.current = null;
+      playbackStartedAtRef.current = null;
       setActivePlaybackKey(null);
       setManualPlayRequired(false);
 
@@ -99,6 +106,12 @@ export function SongPlayer({
       window.clearTimeout(autoplayTimerRef.current);
       autoplayTimerRef.current = null;
     }
+
+    if (activePlaybackKeyRef.current !== playbackKey) {
+      activePlaybackKeyRef.current = playbackKey;
+      playbackStartedAtRef.current = performance.now();
+    }
+
     setActivePlaybackKey(playbackKey);
     setManualPlayRequired(false);
   };
@@ -116,6 +129,25 @@ export function SongPlayer({
   };
 
   const handleEnd: YouTubeProps["onEnd"] = () => {
+    const playbackStartedAt = playbackStartedAtRef.current;
+    const minimumPlaybackDurationMs = Math.max(
+      0,
+      clipDuration * 1000 - COMPLETION_TOLERANCE_MS,
+    );
+
+    if (
+      activePlaybackKeyRef.current !== playbackKey ||
+      completedPlaybackKeyRef.current === playbackKey ||
+      playbackStartedAt === null ||
+      performance.now() - playbackStartedAt < minimumPlaybackDurationMs
+    ) {
+      return;
+    }
+
+    completedPlaybackKeyRef.current = playbackKey;
+    activePlaybackKeyRef.current = null;
+    playbackStartedAtRef.current = null;
+    setActivePlaybackKey(null);
     onComplete();
     if (autoplayTimerRef.current !== null) {
       window.clearTimeout(autoplayTimerRef.current);

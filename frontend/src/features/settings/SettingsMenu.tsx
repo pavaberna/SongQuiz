@@ -10,14 +10,16 @@ import type {
   GameSettings,
   HungarianSongMode,
 } from "../../types/settings";
+import type { GameLogUserSummary } from "../../types/gameLog";
 import {
   clearGameLog,
   downloadGameLog,
-  readGameLog,
+  readGameLogUsers,
 } from "../../services/gameLogStore";
 
 type SettingsMenuProps = {
   disabled?: boolean;
+  isAdmin?: boolean;
   language: GameLanguage;
   onChange: (settings: GameSettings) => void;
   settings: GameSettings;
@@ -35,6 +37,9 @@ const textByLanguage = {
     settings: "Beállítások",
     songsPerPlayer: "Dalok játékosonként",
     testLog: "Tesztelési napló",
+    logUser: "Felhasználó",
+    loadingLogs: "Naplók betöltése...",
+    noLogUsers: "Még nincs felhasználói napló.",
   },
   en: {
     foreignOnly: "Off",
@@ -47,18 +52,51 @@ const textByLanguage = {
     settings: "Settings",
     songsPerPlayer: "Songs per player",
     testLog: "Test log",
+    logUser: "User",
+    loadingLogs: "Loading logs...",
+    noLogUsers: "There are no user logs yet.",
   },
 };
 
 export function SettingsMenu({
   disabled = false,
+  isAdmin = false,
   language,
   onChange,
   settings,
 }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [logEntryCount, setLogEntryCount] = useState(readGameLog().length);
+  const [isLogLoading, setIsLogLoading] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
+  const [logUsers, setLogUsers] = useState<GameLogUserSummary[]>([]);
+  const [selectedLogUserKey, setSelectedLogUserKey] = useState("");
   const text = textByLanguage[language];
+  const selectedLogUser = logUsers.find(
+    (user) => user.userStorageKey === selectedLogUserKey,
+  );
+
+  async function refreshLogUsers(): Promise<void> {
+    setIsLogLoading(true);
+    setLogError(null);
+
+    try {
+      const users = await readGameLogUsers();
+
+      setLogUsers(users);
+      setSelectedLogUserKey((currentKey) =>
+        users.some((user) => user.userStorageKey === currentKey)
+          ? currentKey
+          : (users[0]?.userStorageKey ?? ""),
+      );
+    } catch (error) {
+      console.error("Failed to load the test log.", error);
+      setLogError(
+        error instanceof Error ? error.message : "Unknown log error.",
+      );
+    } finally {
+      setIsLogLoading(false);
+    }
+  }
 
   const songModeOptions: Array<{
     label: string;
@@ -82,7 +120,10 @@ export function SettingsMenu({
         className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-neutral-800 bg-neutral-950/80 text-neutral-200 shadow-inner transition-colors hover:border-fuchsia-400/60 hover:text-fuchsia-200 focus:border-fuchsia-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-400/20 disabled:cursor-not-allowed disabled:opacity-40"
         disabled={disabled}
         onClick={() => {
-          setLogEntryCount(readGameLog().length);
+          if (!isOpen && isAdmin) {
+            void refreshLogUsers();
+          }
+
           setIsOpen((currentValue) => !currentValue);
         }}
         title={text.settings}
@@ -177,41 +218,117 @@ export function SettingsMenu({
             />
           </label>
 
-          <div className="mt-5 border-t border-neutral-800 pt-4">
-            <div className="mb-3 flex items-center justify-between gap-4">
-              <p className="text-sm font-bold text-neutral-200">
-                {text.testLog}
-              </p>
-              <span className="text-xs font-bold text-neutral-500">
-                {logEntryCount}
-              </span>
-            </div>
+          {isAdmin && (
+            <div className="mt-5 border-t border-neutral-800 pt-4">
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <p className="text-sm font-bold text-neutral-200">
+                  {text.testLog}
+                </p>
+                <span className="text-xs font-bold text-neutral-500">
+                  {selectedLogUser?.entryCount ?? 0}
+                </span>
+              </div>
 
-            <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
-              <button
-                className="flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-control border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-100 transition-colors hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={logEntryCount === 0}
-                onClick={downloadGameLog}
-                type="button"
-              >
-                <Download className="h-4 w-4" />
-                {text.downloadLog}
-              </button>
+              {isLogLoading ? (
+                <p className="text-xs font-semibold text-neutral-400">
+                  {text.loadingLogs}
+                </p>
+              ) : logUsers.length === 0 ? (
+                <p className="text-xs font-semibold text-neutral-400">
+                  {text.noLogUsers}
+                </p>
+              ) : (
+                <label className="mb-3 block text-xs font-bold text-neutral-300">
+                  <span className="mb-2 block">{text.logUser}</span>
+                  <select
+                    className="h-10 w-full rounded-control border border-neutral-700 bg-black px-3 text-sm text-white outline-none transition-colors focus:border-fuchsia-400"
+                    onChange={(event) =>
+                      setSelectedLogUserKey(event.target.value)
+                    }
+                    value={selectedLogUserKey}
+                  >
+                    {logUsers.map((user) => (
+                      <option
+                        key={user.userStorageKey}
+                        value={user.userStorageKey}
+                      >
+                        {user.email} ({user.entryCount})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
-              <button
-                className="flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-control border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-100 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={logEntryCount === 0}
-                onClick={() => {
-                  clearGameLog();
-                  setLogEntryCount(0);
-                }}
-                type="button"
-              >
-                <Trash2 className="h-4 w-4" />
-                {text.clearLog}
-              </button>
+              {logError && (
+                <p className="mb-3 text-xs font-semibold text-rose-300">
+                  {logError}
+                </p>
+              )}
+
+              <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+                <button
+                  className="flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-control border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-100 transition-colors hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={
+                    isLogLoading ||
+                    !selectedLogUser ||
+                    selectedLogUser.entryCount === 0
+                  }
+                  onClick={() => {
+                    if (!selectedLogUser) {
+                      return;
+                    }
+
+                    void downloadGameLog(selectedLogUser).catch(
+                      (error: unknown) => {
+                        console.error(
+                          "Failed to download the test log.",
+                          error,
+                        );
+                        setLogError(
+                          error instanceof Error
+                            ? error.message
+                            : "Unknown log error.",
+                        );
+                      },
+                    );
+                  }}
+                  type="button"
+                >
+                  <Download className="h-4 w-4" />
+                  {text.downloadLog}
+                </button>
+
+                <button
+                  className="flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-control border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-100 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={
+                    isLogLoading ||
+                    !selectedLogUser ||
+                    selectedLogUser.entryCount === 0
+                  }
+                  onClick={() => {
+                    if (!selectedLogUser) {
+                      return;
+                    }
+
+                    void clearGameLog(selectedLogUser.userStorageKey)
+                      .then(refreshLogUsers)
+                      .catch((error: unknown) => {
+                        console.error("Failed to clear the test log.", error);
+                        setLogError(
+                          error instanceof Error
+                            ? error.message
+                            : "Unknown log error.",
+                        );
+                      });
+                  }}
+                  type="button"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {text.clearLog}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

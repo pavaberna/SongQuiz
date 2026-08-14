@@ -22,6 +22,25 @@ export function getAllowedGoogleEmails(): Set<string> {
   return new Set(emails);
 }
 
+export function getAdminGoogleEmails(): Set<string> {
+  const rawEmails = process.env.ADMIN_GOOGLE_EMAILS;
+
+  if (!rawEmails) {
+    return new Set();
+  }
+
+  return new Set(
+    rawEmails
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export function isAdminGoogleEmail(email: string): boolean {
+  return getAdminGoogleEmails().has(email.trim().toLowerCase());
+}
+
 export function getAuthCookieOptions(): CookieOptions {
   return {
     httpOnly: true,

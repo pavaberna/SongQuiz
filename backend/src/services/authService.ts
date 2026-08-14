@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import {
   AUTH_SESSION_DURATION_SECONDS,
   getAllowedGoogleEmails,
+  isAdminGoogleEmail,
 } from "../config/authConfig";
 import type { AuthUser } from "../types/auth";
 
@@ -47,6 +48,7 @@ export async function authenticateGoogleCredential(
   return {
     email,
     googleSubject: payload.sub,
+    isAdmin: isAdminGoogleEmail(email),
     name: payload.name ?? null,
     picture: payload.picture ?? null,
   };
@@ -94,6 +96,7 @@ export function verifyAuthSessionToken(token: string): AuthUser {
   return {
     email,
     googleSubject: decoded.sub,
+    isAdmin: isAdminGoogleEmail(email),
     name: typeof decoded.name === "string" ? decoded.name : null,
     picture: typeof decoded.picture === "string" ? decoded.picture : null,
   };

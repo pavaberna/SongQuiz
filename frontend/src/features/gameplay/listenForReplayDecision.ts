@@ -51,14 +51,6 @@ export async function listenForReplayDecision(
     try {
       const response = await submitReplayDecision(transcript, signal);
 
-      saveGameLogEntry({
-        accepted: true,
-        createdAt: new Date().toISOString(),
-        decision: response.result.decision,
-        kind: "replay_decision",
-        transcript,
-      });
-
       return response;
     } catch (error) {
       if (signal?.aborted) {

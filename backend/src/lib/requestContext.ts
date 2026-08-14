@@ -9,13 +9,15 @@ type RequestContext = {
 
 const requestContext = new AsyncLocalStorage<RequestContext>();
 
+export function createUserStorageKey(googleSubject: string): string {
+  return createHash("sha256").update(googleSubject).digest("hex");
+}
+
 export function runWithAuthenticatedUser<T>(
   user: AuthUser,
   operation: () => T,
 ): T {
-  const userStorageKey = createHash("sha256")
-    .update(user.googleSubject)
-    .digest("hex");
+  const userStorageKey = createUserStorageKey(user.googleSubject);
 
   return requestContext.run({ userStorageKey }, operation);
 }

@@ -30,6 +30,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { DEFAULT_GAME_SETTINGS } from "./config/gameSettings";
 import type { GameSettings } from "./types/settings";
 import { unlockAudioRecording } from "./audio/recordAudio";
+import { saveGameError } from "./services/gameLogStore";
 
 function isSetupCancelled(error: unknown): boolean {
   return (
@@ -123,6 +124,7 @@ function App() {
     error: unknown,
     errorLanguage: GameLanguage,
   ): Promise<void> {
+    saveGameError(error, "game_setup");
     setupAbortControllerRef.current?.abort();
     stopVoicePlayback();
 

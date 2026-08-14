@@ -7,10 +7,7 @@ import {
 import { buildSongListPrompt } from "../prompts/songListPrompt";
 import type { GeneratedSong, GenerateSongListParams } from "../types/song";
 import { buildSongListResponseSchema } from "../schemas/songListSchema";
-import {
-  getPopularityTierCounts,
-  shuffleSongs,
-} from "./songDiversityService";
+import { getPopularityTierCounts, shuffleSongs } from "./songDiversityService";
 import {
   getRequestedGenres,
   matchesEveryRequestedGenre,

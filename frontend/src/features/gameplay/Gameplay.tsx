@@ -13,7 +13,10 @@ import type { GameSummary } from "../../types/gameSummary";
 import { sendGameCommand } from "../../api/gameCommandApi";
 import type { GameCommand } from "../../types/gameCommand";
 import { GameControls } from "./GameControls";
-import { saveGameLogEntry } from "../../services/gameLogStore";
+import {
+  saveGameError,
+  saveGameLogEntry,
+} from "../../services/gameLogStore";
 import { startPlayAgain } from "../../api/replayApi";
 import { AppHeader } from "../../components/layout/AppHeader";
 import { GameEndControls } from "./GameEndControls";
@@ -110,6 +113,8 @@ export function Gameplay({
   function handleGameplayFailure(error: unknown): void {
     const message =
       error instanceof Error ? error.message : "Unknown gameplay error.";
+
+    saveGameError(error, "gameplay");
 
     cancelAnswerRecording();
     cancelReplayDecision();
@@ -210,18 +215,20 @@ export function Gameplay({
       const response = await recordAndSubmitAnswer(createAnswerSignal());
 
       setAnswerResponse(response);
-      saveGameLogEntry({
-        createdAt: new Date().toISOString(),
-        kind: "answer",
-        roundNumber: currentRound.roundNumber,
-        playerId: response.result.playerId,
-        transcript: response.transcript,
-        correctArtist: response.result.correctAnswer.artist,
-        correctTitle: response.result.correctAnswer.title,
-        pointsAwarded: response.result.pointsAwarded,
-        skipped: response.result.skipped,
-        judgeResult: response.result.judgeResult,
-      });
+      if (!response.result.judgeResult.perfectMatch) {
+        saveGameLogEntry({
+          createdAt: new Date().toISOString(),
+          kind: "answer",
+          roundNumber: currentRound.roundNumber,
+          playerId: response.result.playerId,
+          transcript: response.transcript,
+          correctArtist: response.result.correctAnswer.artist,
+          correctTitle: response.result.correctAnswer.title,
+          pointsAwarded: response.result.pointsAwarded,
+          skipped: response.result.skipped,
+          judgeResult: response.result.judgeResult,
+        });
+      }
       setPhase("result");
       await playVoiceInstruction(language, response.voice);
 
