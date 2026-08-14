@@ -5,6 +5,12 @@ import { hasPlayableYoutubeData } from "../utils/songValidation";
 import { matchesEveryRequestedGenre, getRequestedGenres } from "./songGenreService";
 import { shuffleSongs } from "./songDiversityService";
 import {
+  getUniqueSongs,
+  partitionSongsByHistory,
+  readSongHistory,
+  songsHaveSameIdentity,
+} from "./songHistoryStore";
+import {
   readCurrentSongList,
   saveCurrentSongListFile,
 } from "./songListStore";
@@ -40,24 +46,36 @@ export async function addCachedTracksToCurrentSongList(): Promise<CacheFallbackR
     yearRange.maximumYear,
   );
   const requestedGenres = getRequestedGenres(songList.request.genre);
-  const existingYoutubeIds = new Set(
-    songList.songs
-      .map((song) => song.youtubeId)
-      .filter((youtubeId): youtubeId is string => youtubeId !== null),
+  const songHistory = await readSongHistory();
+  const matchingCachedSongs = getUniqueSongs(
+    cachedTracks
+      .filter(
+        (track) =>
+          !songList.songs.some((song) =>
+            songsHaveSameIdentity(song, track),
+          ) && matchesEveryRequestedGenre(track.genres, requestedGenres),
+      )
+      .map(trackToStoredSong)
+      .filter(hasPlayableYoutubeData),
   );
-
-  const matchingCachedSongs = cachedTracks
-    .filter(
-      (track) =>
-        !existingYoutubeIds.has(track.youtubeId) &&
-        matchesEveryRequestedGenre(track.genres, requestedGenres),
-    )
-    .map(trackToStoredSong)
-    .filter(hasPlayableYoutubeData);
-  const fallbackSongs = shuffleSongs(matchingCachedSongs).slice(
+  const { freshSongs, recentSongs } = partitionSongsByHistory(
+    matchingCachedSongs,
+    songHistory,
+  );
+  const fallbackSongs = [...shuffleSongs(freshSongs), ...recentSongs].slice(
     0,
     missingBeforeFallback,
   );
+  const reusedSongCount = Math.max(
+    fallbackSongs.length - freshSongs.length,
+    0,
+  );
+
+  if (reusedSongCount > 0) {
+    console.warn(
+      `Cache fallback reused ${reusedSongCount} recently played songs because no fresh matching tracks remained.`,
+    );
+  }
 
   songList.songs.push(...fallbackSongs);
   songList.generatedSongCount = songList.songs.length;

@@ -23,10 +23,16 @@ export function SongPlayer({
   const completedPlaybackKeyRef = useRef<string | null>(null);
   const playbackStartedAtRef = useRef<number | null>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
+  const isPausedRef = useRef(isPaused);
   const [activePlaybackKey, setActivePlaybackKey] = useState<string | null>(
     null,
   );
   const [manualPlayRequired, setManualPlayRequired] = useState(false);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
   const startClip = useCallback(
     (player: YouTubePlayer) => {
       if (autoplayTimerRef.current !== null) {
@@ -39,11 +45,18 @@ export function SongPlayer({
       setActivePlaybackKey(null);
       setManualPlayRequired(false);
 
-      player.loadVideoById({
+      const video = {
         videoId: youtubeId,
         startSeconds: startOffset,
         endSeconds: startOffset + clipDuration,
-      });
+      };
+
+      if (isPausedRef.current) {
+        player.cueVideoById(video);
+        return;
+      }
+
+      player.loadVideoById(video);
 
       autoplayTimerRef.current = window.setTimeout(() => {
         autoplayTimerRef.current = null;

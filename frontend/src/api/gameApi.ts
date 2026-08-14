@@ -1,5 +1,6 @@
 import type { ApiErrorResponse } from "../types/api";
 import type {
+  CurrentGameSession,
   PrepareGameSessionResponse,
   StartRoundResponse,
 } from "../types/game";
@@ -96,4 +97,26 @@ export async function getGameSummary(): Promise<GameSummaryResponse> {
   }
 
   return data;
+}
+
+export async function getCurrentGameSession(): Promise<CurrentGameSession | null> {
+  const url = new URL("/api/dev/current-game-session", API_BASE_URL);
+  const response = await apiFetch(url);
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const errorData = (await response
+      .json()
+      .catch(() => null)) as ApiErrorResponse | null;
+
+    throw new Error(
+      errorData?.error ??
+        `Loading the current game failed with status ${response.status}.`,
+    );
+  }
+
+  return (await response.json()) as CurrentGameSession;
 }

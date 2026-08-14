@@ -7,7 +7,10 @@ export async function prepareGame(
   generatedSongCount: number,
   signal?: AbortSignal,
 ): Promise<PreparedGameSession> {
-  const maxRequests = Math.ceil(generatedSongCount / ENRICHMENT_LIMIT);
+  const maxRequests = Math.max(
+    1,
+    Math.ceil(generatedSongCount / ENRICHMENT_LIMIT),
+  );
 
   for (let requestCount = 0; requestCount < maxRequests; requestCount++) {
     const isLastRequest = requestCount === maxRequests - 1;

@@ -12,6 +12,11 @@ import {
   getRequestedGenres,
   matchesEveryRequestedGenre,
 } from "./songGenreService";
+import {
+  getUniqueSongs,
+  partitionSongsByHistory,
+  type SongReference,
+} from "./songHistoryStore";
 import { randomUUID } from "node:crypto";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
@@ -21,8 +26,6 @@ const CURATION_FOCUSES = [
   "Mix commercial hits with credible local, alternative, and cult favourites.",
   "Explore different artists and scenes while preserving Hungarian cultural relevance.",
 ] as const;
-
-type ExcludedSong = Pick<GeneratedSong, "artist" | "title">;
 
 function getHungarianSongCount(
   totalSongCount: number,
@@ -53,7 +56,7 @@ function getHungarianSongCount(
 
 export async function generateSongList(
   params: GenerateSongListParams,
-  excludedSongs: ExcludedSong[] = [],
+  excludedSongs: SongReference[] = [],
 ): Promise<GeneratedSong[]> {
   const apiKey = process.env.GEMINI_API_KEY;
 
@@ -154,17 +157,13 @@ export async function generateSongList(
     };
   });
 
-  const matchingSongs = songs.filter((song) =>
+  const genreMatchingSongs = songs.filter((song) =>
     matchesEveryRequestedGenre(song.genres, requestedGenres),
   );
+  const matchingSongs = getUniqueSongs(genreMatchingSongs);
 
-  if (matchingSongs.length < targetSongCount) {
-    throw new Error(
-      `Gemini returned only ${matchingSongs.length} songs matching every requested genre, but ${targetSongCount} are required.`,
-    );
-  }
-
-  const rejectedSongCount = songs.length - matchingSongs.length;
+  const rejectedSongCount = songs.length - genreMatchingSongs.length;
+  const duplicateSongCount = genreMatchingSongs.length - matchingSongs.length;
 
   if (rejectedSongCount > 0) {
     console.warn(
@@ -172,5 +171,33 @@ export async function generateSongList(
     );
   }
 
-  return shuffleSongs(matchingSongs);
+  if (duplicateSongCount > 0) {
+    console.warn(`Removed ${duplicateSongCount} duplicate Gemini songs.`);
+  }
+
+  const { freshSongs, recentSongs } = partitionSongsByHistory(
+    matchingSongs,
+    excludedSongs,
+  );
+  const requiredRecentSongCount = Math.max(
+    targetSongCount - freshSongs.length,
+    0,
+  );
+  const allowedRecentSongs = recentSongs.slice(0, requiredRecentSongCount);
+
+  if (allowedRecentSongs.length > 0) {
+    console.warn(
+      `Gemini did not provide enough fresh songs. Reusing ${allowedRecentSongs.length} of the oldest excluded songs.`,
+    );
+  }
+
+  const filteredSongs = [...freshSongs, ...allowedRecentSongs];
+
+  if (filteredSongs.length < targetSongCount) {
+    console.warn(
+      `Only ${filteredSongs.length} unique matching songs remain for ${targetSongCount} required songs. Cache fallback will be needed.`,
+    );
+  }
+
+  return shuffleSongs(filteredSongs);
 }

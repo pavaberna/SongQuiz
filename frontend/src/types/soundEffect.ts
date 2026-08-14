@@ -15,3 +15,9 @@ export type SoundEffectOptions = {
   signal?: AbortSignal;
   volume?: number;
 };
+
+export type SoundEffectLibrary = Record<SoundEffectKey, string[]>;
+
+export type SoundEffectLibraryResponse = {
+  soundEffects: SoundEffectLibrary;
+};

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { askUntilValid } from "./features/game-setup/askUntilValid";
 import { GameSetup } from "./features/game-setup/GameSetup";
@@ -13,7 +13,7 @@ import {
   resumeVoicePlayback,
   stopVoicePlayback,
 } from "./api/voiceApi";
-import { startRound } from "./api/gameApi";
+import { getCurrentGameSession, startRound } from "./api/gameApi";
 import type { GameRound } from "./types/game";
 import type {
   GameSetupErrorStage,
@@ -37,6 +37,7 @@ import {
   preloadSoundEffects,
   resumeSoundEffects,
   stopSoundEffects,
+  unlockSoundEffectPlayback,
 } from "./services/soundEffectPlayer";
 
 function isSetupCancelled(error: unknown): boolean {
@@ -125,7 +126,56 @@ function App() {
   const [decade, setDecade] = useState<string | null>(null);
   const [genre, setGenre] = useState<string | null>(null);
   const [currentRound, setCurrentRound] = useState<GameRound | null>(null);
+  const [isRestoredGamePaused, setIsRestoredGamePaused] = useState(false);
+  const isStartingNewGameRef = useRef(false);
   const setupAbortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    void preloadSoundEffects().catch((error: unknown) => {
+      console.error("Failed to preload sound effects.", error);
+    });
+
+    let isMounted = true;
+
+    void getCurrentGameSession()
+      .then((session) => {
+        if (
+          !isMounted ||
+          isStartingNewGameRef.current ||
+          session === null ||
+          session.currentRound === null ||
+          session.status === "ready" ||
+          session.status === "finished"
+        ) {
+          return;
+        }
+
+        setLanguage(session.language);
+        setPlayers(session.players.length);
+        setDecade(session.decade);
+        setGenre(session.genre);
+        setIsRestoredGamePaused(true);
+        setCurrentRound(session.currentRound);
+
+        if (session.status === "in_progress") {
+          void sendGameCommand("pause", { keepalive: true }).catch(
+            (error: unknown) => {
+              console.error(
+                "The restored game could only be paused locally.",
+                error,
+              );
+            },
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to restore the current game.", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   async function handleSetupFailure(
     error: unknown,
@@ -143,6 +193,7 @@ function App() {
     }
 
     setCurrentRound(null);
+    setIsRestoredGamePaused(false);
     setPlayers(null);
     setDecade(null);
     setGenre(null);
@@ -274,11 +325,10 @@ function App() {
   }
 
   async function handleStart() {
+    isStartingNewGameRef.current = true;
     unlockAudioRecording();
-    void preloadSoundEffects([
-      "microphone_off",
-      "microphone_on",
-    ]);
+    unlockSoundEffectPlayback();
+    void preloadSoundEffects();
 
     const setupController = new AbortController();
     setupAbortControllerRef.current?.abort();
@@ -292,6 +342,7 @@ function App() {
     setTranscript(null);
     setGenre(null);
     setCurrentRound(null);
+    setIsRestoredGamePaused(false);
 
     try {
       const playerAnswer = await runSetupStep("player_count", () =>
@@ -335,6 +386,7 @@ function App() {
   }
 
   async function handleReplay(setup: ReplaySetup) {
+    isStartingNewGameRef.current = true;
     const setupController = new AbortController();
     setupAbortControllerRef.current?.abort();
     setupAbortControllerRef.current = setupController;
@@ -342,6 +394,7 @@ function App() {
     setIsSetupPaused(false);
     resumeVoicePlayback();
     setCurrentRound(null);
+    setIsRestoredGamePaused(false);
     setDecade(null);
     setGenre(null);
     setTranscript(null);
@@ -407,6 +460,7 @@ function App() {
     stopVoicePlayback();
     stopSoundEffects();
     setCurrentRound(null);
+    setIsRestoredGamePaused(false);
     setPlayers(null);
     setDecade(null);
     setGenre(null);
@@ -423,6 +477,7 @@ function App() {
       {currentRound !== null ? (
         <Gameplay
           currentRound={currentRound}
+          initiallyPaused={isRestoredGamePaused}
           language={language}
           onGameEnd={handleGameEnd}
           onReplay={handleReplay}

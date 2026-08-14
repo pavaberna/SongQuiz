@@ -5,6 +5,7 @@ import type { GameSettings } from "./settings";
 
 export type GameplayProps = {
   currentRound: GameRound;
+  initiallyPaused?: boolean;
   language: GameLanguage;
   onGameEnd: () => void;
   onRoundChange: (round: GameRound) => void;
@@ -15,7 +16,6 @@ export type GameplayProps = {
 
 export type GameplayPhase =
   | "answering"
-  | "error"
   | "playing"
   | "result"
   | "finished";

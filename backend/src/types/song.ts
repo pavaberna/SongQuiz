@@ -40,3 +40,15 @@ export type CurrentSongListFile = {
   request: GenerateSongListParams;
   songs: StoredSong[];
 };
+
+export type PlayedSongHistoryEntry = {
+  artist: string;
+  title: string;
+  youtubeId: string | null;
+  playedAt: string;
+};
+
+export type SongHistoryFile = {
+  updatedAt: string;
+  songs: PlayedSongHistoryEntry[];
+};

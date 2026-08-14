@@ -3,6 +3,7 @@ import type {
   GameSession,
   GameVoiceInstruction,
 } from "../../types/game";
+import { getNextRoundNumber } from "../../utils/gameRound";
 import type { VoiceLineKey } from "./voiceTypes";
 
 export function createAnswerVoiceInstruction(
@@ -41,7 +42,7 @@ export function createResumeVoiceInstruction(
   const activeRound =
     session.currentRound?.status === "completed" ? null : session.currentRound;
 
-  const roundNumber = activeRound?.roundNumber ?? session.roundNumber + 1;
+  const roundNumber = activeRound?.roundNumber ?? getNextRoundNumber(session);
 
   const playerId =
     activeRound?.currentPlayer.id ??

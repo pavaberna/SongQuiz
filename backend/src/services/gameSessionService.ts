@@ -15,7 +15,10 @@ import type {
 } from "../types/game";
 import { readCurrentSongList } from "./songListStore";
 import { hasPlayableYoutubeData } from "../utils/songValidation";
-import type { CurrentSongListFile } from "../types/song";
+import type {
+  CurrentSongListFile,
+  PlayedSongHistoryEntry,
+} from "../types/song";
 import {
   saveCurrentGameSession,
   readCurrentGameSession,
@@ -37,8 +40,18 @@ import type {
   JudgeSongAnswerResult,
   SubmitAnswerResult,
 } from "../types/answer";
-import { selectDiverseGameSongs } from "./songDiversityService";
+import {
+  selectDiverseGameSongs,
+  shuffleSongs,
+} from "./songDiversityService";
 import { addCachedTracksToCurrentSongList } from "./songCacheFallbackService";
+import { getNextRoundNumber } from "../utils/gameRound";
+import {
+  addSongToHistory,
+  getUniqueSongs,
+  partitionSongsByHistory,
+  readSongHistory,
+} from "./songHistoryStore";
 
 export function createPlayers(playersCount: number): GamePlayer[] {
   const players: GamePlayer[] = [];
@@ -51,6 +64,7 @@ export function createPlayers(playersCount: number): GamePlayer[] {
 
 export async function createGameSessionFromCurrentSongList(): Promise<GameSession> {
   const currentSongList = await readCurrentSongList();
+  const songHistory = await readSongHistory();
   const session: GameSession = {
     id: randomUUID(),
     language: currentSongList.request.language ?? "hu",
@@ -60,7 +74,7 @@ export async function createGameSessionFromCurrentSongList(): Promise<GameSessio
     decade: currentSongList.request.decade,
     genre: currentSongList.request.genre,
     currentPlayerIndex: 0,
-    songs: selectGameSongs(currentSongList),
+    songs: selectGameSongs(currentSongList, songHistory),
     roundNumber: 0,
     currentRound: null,
     rounds: [],
@@ -154,9 +168,7 @@ export async function startNextRound(): Promise<GameSession> {
   }
 
   if (session.currentRound && session.currentRound.status !== "completed") {
-    throw new Error(
-      "Cannot start next round before completing the current round.",
-    );
+    return session;
   }
 
   const currentSong = session.songs.find((song) => !song.played);
@@ -190,7 +202,7 @@ export async function startNextRound(): Promise<GameSession> {
 
   const calculatedStartOffset = calculateStartOffset(duration);
 
-  const nextRoundNumber = session.roundNumber + 1;
+  const nextRoundNumber = getNextRoundNumber(session);
 
   const round: GameRound = {
     roundNumber: nextRoundNumber,
@@ -217,6 +229,7 @@ export async function startNextRound(): Promise<GameSession> {
     "round_started",
     `Round ${nextRoundNumber} started for Player ${currentPlayer.id}.`,
   );
+  await addSongToHistory(currentSong);
   await saveCurrentGameSession(session);
 
   return session;
@@ -226,7 +239,7 @@ export async function pauseGame(): Promise<GameSession> {
   const session = await readCurrentGameSession();
 
   if (session.status === "finished") {
-    throw new Error("This game is already finished");
+    return session;
   }
 
   if (session.status === "paused") {
@@ -246,11 +259,11 @@ export async function resumeGame(): Promise<GameSession> {
   const session = await readCurrentGameSession();
 
   if (session.status === "finished") {
-    throw new Error("This game is already finished");
+    return session;
   }
 
-  if (session.status !== "paused") {
-    throw new Error("Only paused game can be resumed");
+  if (session.status === "in_progress") {
+    return session;
   }
 
   session.status = "in_progress";
@@ -292,14 +305,32 @@ export async function submitAnswer(
   }
 
   const currentRound = session.currentRound;
+
+  if (currentRound.status === "completed") {
+    if (
+      typeof currentRound.pointsAwarded !== "number" ||
+      currentRound.judgeResult === undefined
+    ) {
+      throw new Error("The completed round does not contain an answer result.");
+    }
+
+    return {
+      session,
+      playerId: currentRound.currentPlayer.id,
+      pointsAwarded: currentRound.pointsAwarded,
+      skipped: isPassAnswer(currentRound.playerAnswer ?? ""),
+      judgeResult: currentRound.judgeResult,
+      correctAnswer: {
+        artist: currentRound.currentSong.artist,
+        title: currentRound.currentSong.title,
+      },
+    };
+  }
+
   const skipped = isPassAnswer(answer);
 
   if (session.status === "finished") {
     throw new Error("This game is already finished.");
-  }
-
-  if (currentRound.status === "completed") {
-    throw new Error("This round is already completed.");
   }
 
   let judgeResult: JudgeSongAnswerResult;
@@ -400,8 +431,11 @@ export async function getGameSummary(): Promise<GameSummary> {
     status: session.status,
     players: session.players,
     winnerIds,
-    roundsPlayed: session.rounds?.length ?? 0,
-    totalRounds: session.songs.length,
+    roundsPlayed:
+      session.rounds.length === 0
+        ? 0
+        : Math.ceil(session.rounds.length / session.players.length),
+    totalRounds: Math.ceil(session.songs.length / session.players.length),
     events: session.events ?? [],
     leaderboard,
   };
@@ -563,8 +597,13 @@ function normalizeGameCommand(rawCommand: string): GameCommand | null {
   return null;
 }
 
-function selectGameSongs(currentSongList: CurrentSongListFile): GameSong[] {
-  const playableSongs = currentSongList.songs.filter(hasPlayableYoutubeData);
+function selectGameSongs(
+  currentSongList: CurrentSongListFile,
+  songHistory: PlayedSongHistoryEntry[],
+): GameSong[] {
+  const playableSongs = getUniqueSongs(
+    currentSongList.songs.filter(hasPlayableYoutubeData),
+  );
   if (playableSongs.length < currentSongList.targetSongCount) {
     throw new Error(
       `Not enough playable songs. Required: ${currentSongList.targetSongCount}, available: ${playableSongs.length}.`,
@@ -574,11 +613,26 @@ function selectGameSongs(currentSongList: CurrentSongListFile): GameSong[] {
     ...song,
     played: false,
   }));
-
-  return selectDiverseGameSongs(
+  const { freshSongs, recentSongs } = partitionSongsByHistory(
     gameSongs,
-    currentSongList.targetSongCount,
+    songHistory,
   );
+  const selectedFreshSongs = selectDiverseGameSongs(
+    freshSongs,
+    Math.min(currentSongList.targetSongCount, freshSongs.length),
+  );
+  const reusedSongs = recentSongs.slice(
+    0,
+    currentSongList.targetSongCount - selectedFreshSongs.length,
+  );
+
+  if (reusedSongs.length > 0) {
+    console.warn(
+      `Game session reused ${reusedSongs.length} recently played songs because no fresh playable songs remained.`,
+    );
+  }
+
+  return shuffleSongs([...selectedFreshSongs, ...reusedSongs]);
 }
 
 function isPassAnswer(rawAnswer: string): boolean {

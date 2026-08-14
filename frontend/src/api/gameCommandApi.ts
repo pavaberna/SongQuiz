@@ -8,6 +8,7 @@ import { apiFetch } from "./apiFetch";
 
 export async function sendGameCommand(
   command: GameCommand,
+  options: { keepalive?: boolean } = {},
 ): Promise<GameCommandResponse> {
   const url = new URL("/api/dev/game-command", API_BASE_URL);
 
@@ -16,6 +17,7 @@ export async function sendGameCommand(
     headers: {
       "Content-Type": "application/json",
     },
+    keepalive: options.keepalive,
     method: "POST",
   });
 

@@ -32,8 +32,15 @@ function selectSoundEffectFile(key: SoundEffectKey): string {
 
 export async function readSoundEffect(
   key: SoundEffectKey,
+  requestedFile?: string,
 ): Promise<Buffer> {
-  const selectedFile = selectSoundEffectFile(key);
+  const files: readonly string[] = soundEffectFiles[key];
+
+  if (requestedFile !== undefined && !files.includes(requestedFile)) {
+    throw new Error(`The ${requestedFile} file is not configured for ${key}.`);
+  }
+
+  const selectedFile = requestedFile ?? selectSoundEffectFile(key);
   const assetPath = path.join(
     __dirname,
     "..",

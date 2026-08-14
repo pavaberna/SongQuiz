@@ -69,3 +69,13 @@ export type StartRoundResponse = {
   session: StartedRoundSession;
   voice: RoundVoiceInstruction | null;
 };
+
+export type CurrentGameSession = {
+  id: string;
+  language: "hu" | "en";
+  status: "ready" | "in_progress" | "paused" | "finished";
+  players: GamePlayer[];
+  decade: string;
+  genre: string;
+  currentRound: GameRound | null;
+};

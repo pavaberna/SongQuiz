@@ -7,6 +7,7 @@ import type { CurrentSongListFile } from "../types/song";
 import { findCachedTrackBySong, saveTrackToCache } from "./trackRepository";
 import { hasPlayableYoutubeData } from "../utils/songValidation";
 import { SONGS_PER_PLAYER } from "../config/songRules";
+import { getUniqueSongs } from "./songHistoryStore";
 
 export type EnrichOneSongResult = {
   updated: boolean;
@@ -235,8 +236,8 @@ export async function getSongListReadiness(): Promise<SongListReadinessResult> {
   const generatedSongCount =
     songlist.generatedSongCount ?? songlist.songs.length;
 
-  const playableSongCount = songlist.songs.filter(
-    hasPlayableYoutubeData,
+  const playableSongCount = getUniqueSongs(
+    songlist.songs.filter(hasPlayableYoutubeData),
   ).length;
 
   const missingPlayableSongCount = Math.max(

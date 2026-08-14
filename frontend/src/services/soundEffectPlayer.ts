@@ -1,6 +1,10 @@
-import { fetchSoundEffect } from "../api/soundEffectApi";
+import {
+  fetchSoundEffectFile,
+  fetchSoundEffectLibrary,
+} from "../api/soundEffectApi";
 import type {
   SoundEffectKey,
+  SoundEffectLibrary,
   SoundEffectOptions,
 } from "../types/soundEffect";
 
@@ -15,62 +19,152 @@ type SoundSource = {
   url: string | null;
 };
 
-const soundUrls = new Map<SoundEffectKey, Promise<string | null>>();
 const activeSounds = new Set<ActiveSound>();
-let isSoundPlaybackPaused = false;
+const previousSoundUrlByKey = new Map<SoundEffectKey, string>();
+const SILENT_AUDIO_SOURCE =
+  "data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==";
 
-function isRandomizedSoundEffect(key: SoundEffectKey): boolean {
-  return key.startsWith("answer_");
+let foregroundAudio: HTMLAudioElement | null = null;
+let introAudio: HTMLAudioElement | null = null;
+let isSoundPlaybackPaused = false;
+let soundLibraryPromise: Promise<SoundEffectLibrary> | null = null;
+
+function createAudioElement(): HTMLAudioElement {
+  const audio = new Audio();
+
+  audio.preload = "auto";
+
+  return audio;
 }
 
-function getCachedSoundUrl(key: SoundEffectKey): Promise<string | null> {
-  const cachedUrl = soundUrls.get(key);
+function getForegroundAudio(): HTMLAudioElement {
+  foregroundAudio ??= createAudioElement();
 
-  if (cachedUrl) {
-    return cachedUrl;
+  return foregroundAudio;
+}
+
+function getIntroAudio(): HTMLAudioElement {
+  introAudio ??= createAudioElement();
+
+  return introAudio;
+}
+
+function getAudioElement(key: SoundEffectKey): HTMLAudioElement {
+  return key === "intro" ? getIntroAudio() : getForegroundAudio();
+}
+
+function unlockAudioElement(audio: HTMLAudioElement): void {
+  if (!audio.paused) {
+    return;
   }
 
-  const urlPromise = fetchSoundEffect(key)
-    .then((audio) => (audio === null ? null : URL.createObjectURL(audio)))
+  audio.src = SILENT_AUDIO_SOURCE;
+  audio.load();
+
+  void audio
+    .play()
+    .then(() => {
+      if (audio.getAttribute("src") !== SILENT_AUDIO_SOURCE) {
+        return;
+      }
+
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    })
     .catch((error: unknown) => {
-      soundUrls.delete(key);
-      throw error;
+      console.error("Failed to unlock sound effect playback.", error);
     });
+}
 
-  soundUrls.set(key, urlPromise);
+export function unlockSoundEffectPlayback(): void {
+  unlockAudioElement(getForegroundAudio());
+  unlockAudioElement(getIntroAudio());
+}
 
-  return urlPromise;
+async function loadSoundEffectLibrary(): Promise<SoundEffectLibrary> {
+  const manifest = await fetchSoundEffectLibrary();
+  const loadedUrls: string[] = [];
+
+  try {
+    const entries = await Promise.all(
+      (Object.entries(manifest) as [SoundEffectKey, string[]][]).map(
+        async ([key, files]) => {
+          const urls = await Promise.all(
+            files.map(async (file) => {
+              try {
+                const audio = await fetchSoundEffectFile(key, file);
+
+                if (audio === null) {
+                  return null;
+                }
+
+                const url = URL.createObjectURL(audio);
+
+                loadedUrls.push(url);
+
+                return url;
+              } catch (error) {
+                console.error(
+                  `Failed to preload the ${file} sound effect.`,
+                  error,
+                );
+                return null;
+              }
+            }),
+          );
+
+          return [key, urls.filter((url) => url !== null)] as const;
+        },
+      ),
+    );
+
+    return Object.fromEntries(entries) as SoundEffectLibrary;
+  } catch (error) {
+    loadedUrls.forEach((url) => URL.revokeObjectURL(url));
+    throw error;
+  }
+}
+
+function getSoundEffectLibrary(): Promise<SoundEffectLibrary> {
+  soundLibraryPromise ??= loadSoundEffectLibrary().catch((error: unknown) => {
+    soundLibraryPromise = null;
+    throw error;
+  });
+
+  return soundLibraryPromise;
+}
+
+function selectSoundUrl(key: SoundEffectKey, urls: string[]): string | null {
+  if (urls.length === 0) {
+    return null;
+  }
+
+  if (!key.startsWith("answer_") || urls.length === 1) {
+    return urls[0];
+  }
+
+  const previousUrl = previousSoundUrlByKey.get(key);
+  const availableUrls = urls.filter((url) => url !== previousUrl);
+  const selectedUrl =
+    availableUrls[Math.floor(Math.random() * availableUrls.length)];
+
+  previousSoundUrlByKey.set(key, selectedUrl);
+
+  return selectedUrl;
 }
 
 async function getSoundSource(key: SoundEffectKey): Promise<SoundSource> {
-  if (isRandomizedSoundEffect(key)) {
-    const audio = await fetchSoundEffect(key, true);
-    const url = audio === null ? null : URL.createObjectURL(audio);
-
-    return {
-      release: () => {
-        if (url !== null) {
-          URL.revokeObjectURL(url);
-        }
-      },
-      url,
-    };
-  }
+  const library = await getSoundEffectLibrary();
 
   return {
     release: () => undefined,
-    url: await getCachedSoundUrl(key),
+    url: selectSoundUrl(key, library[key]),
   };
 }
 
-export async function preloadSoundEffects(
-  keys: SoundEffectKey[],
-): Promise<void> {
-  await Promise.allSettled(
-    keys
-      .filter((key) => !isRandomizedSoundEffect(key))
-      .map((key) => getCachedSoundUrl(key)),
-  );
+export async function preloadSoundEffects(): Promise<void> {
+  await getSoundEffectLibrary();
 }
 
 export async function playSoundEffect(
@@ -90,10 +184,17 @@ export async function playSoundEffect(
     return;
   }
 
-  const audio = new Audio(source.url);
+  const audio = getAudioElement(key);
 
+  for (const activeSound of [...activeSounds]) {
+    if (activeSound.audio === audio) {
+      activeSound.stop();
+    }
+  }
+
+  audio.src = source.url;
+  audio.load();
   audio.loop = loop;
-  audio.preload = "auto";
   audio.volume = Math.min(1, Math.max(0, volume));
 
   return new Promise<void>((resolve, reject) => {
@@ -109,6 +210,12 @@ export async function playSoundEffect(
       audio.removeEventListener("error", handleError);
       signal?.removeEventListener("abort", handleAbort);
       activeSounds.delete(activeSound);
+
+      if (audio.getAttribute("src") === source.url) {
+        audio.removeAttribute("src");
+        audio.load();
+      }
+
       source.release();
     }
 

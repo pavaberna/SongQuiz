@@ -109,9 +109,9 @@ export const huVoiceLines: VoiceLineCatalog = {
   answer_none_correct: ({ correctArtist, correctTitle }) =>
     `Sajnos egyik sem talált. A helyes válasz: ${correctArtist}: ${correctTitle}.`,
   answer_artist_correct: ({ correctTitle, points }) =>
-    `Gratulálok, az előadót eltaláltad. A helyes számcím ${correctTitle} lett volna. Szereztél ${points} pontot.`,
+    `Az előadót eltaláltad. A helyes számcím ${correctTitle} lett volna. Szereztél ${points} pontot.`,
   answer_title_correct: ({ correctArtist, points }) =>
-    `Gratulálok, a számcímet eltaláltad. A helyes előadó ${correctArtist} lett volna. Szereztél ${points} pontot.`,
+    `A számcímet eltaláltad. A helyes előadó ${correctArtist} lett volna. Szereztél ${points} pontot.`,
   answer_both_correct: ({ correctArtist, correctTitle, points }) =>
     `Gratulálok, a válasz helyes. ${points} pontot kapsz. A tökéletes válasz ${correctArtist}: ${correctTitle} lett volna.`,
   answer_perfect: ({ points }) =>
@@ -120,21 +120,24 @@ export const huVoiceLines: VoiceLineCatalog = {
     `A helyes válasz ${correctArtist}: ${correctTitle}. ${points} pont.`,
   game_summary: ({ playerScores, winnerId, winnerIds }) => {
     const scoresText = playerScores
-      ?.map((player) => `Player ${player.playerId} pontja: ${player.score}`)
+      ?.map(
+        (player) =>
+          `${formatHungarianPlayer(player.playerId)} játékos pontja: ${player.score}`,
+      )
       .join(", ");
     const winners = winnerIds?.length ? winnerIds : winnerId ? [winnerId] : [];
     const winnerText =
       winners.length > 1
         ? `Döntetlen! A nyertesek: ${winners
-            .map((id) => `Player ${id}`)
+            .map((id) => `${formatHungarianPlayer(id)} játékos`)
             .join(", ")}`
-        : `Player ${winners[0]} nyert! Hurrá!`;
+        : `${formatHungarianOrdinal(winners[0])} játékos nyert! Hurrá!`;
 
     return `A játék véget ért, ${scoresText}. ${winnerText}`;
   },
   ask_play_again: "Szeretnétek új játékot kezdeni?",
-  game_paused: "A játék szünetel, folytatáshoz csak szólj, hogy folytassuk.",
-  game_stopped: "A játék be lett fejezve, új játék indításához csak szólj.",
+  game_paused: "A játék szünetel.",
+  game_stopped: "A játék véget ért.",
   game_resumed: ({ roundNumber, playerId }) =>
     `A játék folytatódik. ${formatHungarianOrdinal(roundNumber)} kör, ${formatHungarianPlayer(playerId)} játékos következik.`,
   restart_ask_decade:

@@ -1,11 +1,13 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SongPlayer } from "./SongPlayer";
 import type { SubmitAudioAnswerResponse } from "../../types/answer";
 import type { GameplayPhase, GameplayProps } from "../../types/gameplay";
 import { recordAndSubmitAnswer } from "./recordAndSubmitAnswer";
 import {
+  pauseVoicePlayback,
   playVoiceInstruction,
   playVoiceLine,
+  resumeVoicePlayback,
   stopVoicePlayback,
 } from "../../api/voiceApi";
 import { getGameSummary, startRound } from "../../api/gameApi";
@@ -24,7 +26,9 @@ import { GameResultsTable } from "./GameResultsTable";
 import { listenForReplayDecision } from "./listenForReplayDecision";
 import { getAnswerSoundEffect } from "./getAnswerSoundEffect";
 import {
+  pauseSoundEffects,
   playSoundEffectSafely,
+  resumeSoundEffects,
   stopSoundEffects,
 } from "../../services/soundEffectPlayer";
 import { MAX_ANSWER_SOUND_EFFECT_DURATION_MS } from "../../config/soundEffects";
@@ -50,6 +54,8 @@ const textByLanguage = {
     position: "Helyezés",
     pointUnit: "pont",
     score: "Pontszám",
+    interrupted:
+      "A játék megszakadt. A Folytatás gombbal ugyanonnan folytathatod.",
   },
   en: {
     listen: "Listen!",
@@ -71,11 +77,14 @@ const textByLanguage = {
     position: "Place",
     pointUnit: "points",
     score: "Score",
+    interrupted:
+      "The game was interrupted. Use Resume to continue from the same point.",
   },
 };
 
 export function Gameplay({
   currentRound,
+  initiallyPaused = false,
   language,
   onGameEnd,
   onReplay,
@@ -87,13 +96,16 @@ export function Gameplay({
   const [answerResponse, setAnswerResponse] =
     useState<SubmitAudioAnswerResponse | null>(null);
   const [gameplayError, setGameplayError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<GameplayPhase>("playing");
+  const [phase, setPhase] = useState<GameplayPhase>(
+    currentRound.status === "completed" ? "result" : "playing",
+  );
   const [gameSummary, setGameSummary] = useState<GameSummary | null>(null);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isPaused, setIsPaused] = useState(initiallyPaused);
   const [isCommandPending, setIsCommandPending] = useState(false);
 
   const activePlaybackIdRef = useRef<string | null>(null);
   const answerAbortControllerRef = useRef<AbortController | null>(null);
+  const answerResponseRef = useRef<SubmitAudioAnswerResponse | null>(null);
   const answeringPlaybackIdRef = useRef<string | null>(null);
   const replayAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -105,6 +117,53 @@ export function Gameplay({
     currentRound.startOffset,
   ].join(":");
   activePlaybackIdRef.current = playbackId;
+
+  const pauseGameplay = useCallback((message: string): void => {
+    answerAbortControllerRef.current?.abort();
+    answerAbortControllerRef.current = null;
+    answeringPlaybackIdRef.current = null;
+    replayAbortControllerRef.current?.abort();
+    replayAbortControllerRef.current = null;
+    pauseVoicePlayback();
+    pauseSoundEffects();
+    setGameplayError(message);
+    setIsPaused(true);
+  }, []);
+
+  useEffect(() => {
+    if (phase === "finished" || isPaused) {
+      return;
+    }
+
+    function handleInterruption(): void {
+      pauseGameplay(text.interrupted);
+
+      void sendGameCommand("pause", { keepalive: true }).catch(
+        (error: unknown) => {
+          console.error(
+            "The game was paused locally, but the server could not be reached.",
+            error,
+          );
+        },
+      );
+    }
+
+    function handleVisibilityChange(): void {
+      if (document.visibilityState === "hidden") {
+        handleInterruption();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("offline", handleInterruption);
+    window.addEventListener("pagehide", handleInterruption);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("offline", handleInterruption);
+      window.removeEventListener("pagehide", handleInterruption);
+    };
+  }, [isPaused, pauseGameplay, phase, text.interrupted]);
 
   function createAnswerSignal(): AbortSignal {
     answerAbortControllerRef.current?.abort();
@@ -132,22 +191,11 @@ export function Gameplay({
 
     saveGameError(error, "gameplay");
 
-    cancelAnswerRecording();
-    cancelReplayDecision();
-    stopVoicePlayback();
-    stopSoundEffects();
-    setAnswerResponse(null);
-    setGameSummary(null);
-    setGameplayError(message);
-    setIsPaused(true);
-    setPhase("error");
+    pauseGameplay(`${message} ${text.interrupted}`);
 
-    void sendGameCommand("end").catch((cleanupError: unknown) =>
-      console.error(
-        "Failed to delete the current game after an error.",
-        cleanupError,
-      ),
-    );
+    void sendGameCommand("pause").catch((pauseError: unknown) => {
+      console.error("The server-side game could not be paused.", pauseError);
+    });
   }
 
   async function handleHome(): Promise<void> {
@@ -195,15 +243,33 @@ export function Gameplay({
       const completedCommand = response.result.command;
 
       if (completedCommand === "pause") {
+        pauseVoicePlayback();
+        pauseSoundEffects();
         setIsPaused(true);
         return;
       }
 
       if (completedCommand === "resume") {
+        resumeVoicePlayback();
+        resumeSoundEffects();
         setIsPaused(false);
 
         if (phase === "answering") {
           void handleClipComplete(playbackId, true);
+        }
+
+        if (phase === "result") {
+          const pendingAnswer = answerResponseRef.current;
+          const continuation =
+            pendingAnswer === null
+              ? startNextRound()
+              : continueAfterAnswer(pendingAnswer, createAnswerSignal());
+
+          void continuation.catch((error: unknown) => {
+            if (!isCancelledError(error)) {
+              handleGameplayFailure(error);
+            }
+          });
         }
 
         return;
@@ -248,6 +314,7 @@ export function Gameplay({
       const answerSignal = createAnswerSignal();
       const response = await recordAndSubmitAnswer(answerSignal);
 
+      answerResponseRef.current = response;
       setAnswerResponse(response);
       if (!response.result.judgeResult.perfectMatch) {
         saveGameLogEntry({
@@ -265,21 +332,7 @@ export function Gameplay({
       }
       setPhase("result");
 
-      if (settings.playAnswerSoundEffects) {
-        await playSoundEffectSafely(getAnswerSoundEffect(response), {
-          maximumDurationMs: MAX_ANSWER_SOUND_EFFECT_DURATION_MS,
-          signal: answerSignal,
-        });
-      }
-
-      await playVoiceInstruction(language, response.voice);
-
-      if (response.result.session.status === "finished") {
-        await showGameSummary();
-        return;
-      }
-
-      await startNextRound();
+      await continueAfterAnswer(response, answerSignal);
     } catch (error) {
       if (isCancelledError(error)) {
         return;
@@ -287,6 +340,27 @@ export function Gameplay({
 
       handleGameplayFailure(error);
     }
+  }
+
+  async function continueAfterAnswer(
+    response: SubmitAudioAnswerResponse,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (settings.playAnswerSoundEffects) {
+      await playSoundEffectSafely(getAnswerSoundEffect(response), {
+        maximumDurationMs: MAX_ANSWER_SOUND_EFFECT_DURATION_MS,
+        signal,
+      });
+    }
+
+    await playVoiceInstruction(language, response.voice, signal);
+
+    if (response.result.session.status === "finished") {
+      await showGameSummary();
+      return;
+    }
+
+    await startNextRound();
   }
 
   async function startNextRound() {
@@ -301,6 +375,7 @@ export function Gameplay({
     await playVoiceInstruction(language, nextRoundVoice);
 
     setAnswerResponse(null);
+    answerResponseRef.current = null;
     setGameplayError(null);
     setIsPaused(false);
     setPhase("playing");
@@ -375,7 +450,7 @@ export function Gameplay({
     <main className="song-screen flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 text-foreground sm:px-8 sm:py-6">
       <AppHeader
         centerContent={
-          phase === "error" ? undefined : phase === "finished" ? (
+          phase === "finished" ? (
             <GameEndControls
               disabled={isCommandPending}
               newGameLabel={text.newGame}
@@ -385,7 +460,9 @@ export function Gameplay({
             />
           ) : (
             <GameControls
-              disabled={isCommandPending || phase === "result"}
+              disabled={
+                isCommandPending || (phase === "result" && !isPaused)
+              }
               isPaused={isPaused}
               labels={{
                 pause: text.pause,
@@ -405,7 +482,7 @@ export function Gameplay({
       />
 
       <section className="song-fade-in flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-5 self-center py-6">
-        {phase !== "finished" && phase !== "error" && (
+        {phase !== "finished" && (
           <div className="flex w-full max-w-[480px] flex-col items-center gap-5">
             <div className="flex w-full items-center justify-between rounded-2xl border border-neutral-800 bg-neutral-950/75 px-5 py-3 shadow-[0_0_24px_rgba(217,70,239,0.14)] backdrop-blur">
               <p className="text-sm font-black uppercase tracking-[0.18em] text-cyan-300">
@@ -476,7 +553,7 @@ export function Gameplay({
           </div>
         )}
 
-        {phase === "error" && gameplayError !== null && (
+        {gameplayError !== null && (
           <p className="w-full max-w-[480px] rounded-control border border-danger/40 bg-danger/10 px-5 py-4 text-center text-danger">
             {gameplayError}
           </p>

@@ -64,6 +64,10 @@ import type { TranscriptionContext } from "./types/speech";
 import type { HungarianSongMode } from "./types/song";
 import { shuffleSongs } from "./services/songDiversityService";
 import {
+  getUniqueSongs,
+  readSongHistory,
+} from "./services/songHistoryStore";
+import {
   authenticateGoogleCredential,
   createAuthSessionToken,
   GoogleAccountNotAllowedError,
@@ -88,6 +92,7 @@ import { saveUserProfile } from "./services/userProfileStore";
 import { getGameLogUserSummaries } from "./services/adminGameLogService";
 import {
   isRandomizedSoundEffectKey,
+  soundEffectFiles,
   soundEffectKeys,
   type SoundEffectKey,
 } from "./config/soundEffects";
@@ -209,6 +214,7 @@ app.post("/api/dev/test-log", async (req, res) => {
 app.get("/api/dev/sound-effect-audio", async (req, res) => {
   try {
     const key = req.query.key;
+    const requestedFile = req.query.file;
 
     if (
       typeof key !== "string" ||
@@ -218,11 +224,24 @@ app.get("/api/dev/sound-effect-audio", async (req, res) => {
       return;
     }
 
-    const audio = await readSoundEffect(key as SoundEffectKey);
+    const soundEffectKey = key as SoundEffectKey;
+
+    if (
+      requestedFile !== undefined &&
+      (typeof requestedFile !== "string" ||
+        !(soundEffectFiles[soundEffectKey] as readonly string[]).includes(
+          requestedFile,
+        ))
+    ) {
+      res.status(400).json({ error: "Invalid sound effect file." });
+      return;
+    }
+
+    const audio = await readSoundEffect(soundEffectKey, requestedFile);
 
     res.setHeader(
       "Cache-Control",
-      isRandomizedSoundEffectKey(key as SoundEffectKey)
+      requestedFile === undefined && isRandomizedSoundEffectKey(soundEffectKey)
         ? "no-store"
         : "private, max-age=86400",
     );
@@ -242,6 +261,11 @@ app.get("/api/dev/sound-effect-audio", async (req, res) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
   }
+});
+
+app.get("/api/dev/sound-effects", (_req, res) => {
+  res.setHeader("Cache-Control", "private, no-cache");
+  res.json({ soundEffects: soundEffectFiles });
 });
 
 app.get(
@@ -366,9 +390,11 @@ app.post("/api/dev/gemini-songs", async (req, res) => {
     };
     const previousSongList = await readCurrentSongListIfExists();
     const previousSongs = previousSongList?.songs ?? [];
-    const excludedSongs = shuffleSongs(previousSongs)
-      .slice(0, 40)
-      .map((song) => ({ artist: song.artist, title: song.title }));
+    const songHistory = await readSongHistory();
+    const excludedSongs = getUniqueSongs([
+      ...songHistory,
+      ...shuffleSongs(previousSongs).slice(0, 40),
+    ]);
     const songs = await generateSongList(request, excludedSongs);
     const savedSongList = await saveCurrentSongList(request, songs);
 
@@ -517,7 +543,7 @@ app.post("/api/dev/start-round", async (req, res) => {
     if (session.currentRound) {
       voice = {
         key:
-          session.currentRound.roundNumber === 1
+          session.currentPlayerIndex === 0
             ? "round_started"
             : "next_player",
         params: {
@@ -539,6 +565,11 @@ app.get("/api/dev/current-game-session", async (req, res) => {
     const session = await readCurrentGameSession();
     res.json(session);
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      res.status(404).json({ error: "There is no current game session." });
+      return;
+    }
+
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
   }
