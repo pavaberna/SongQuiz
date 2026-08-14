@@ -1,5 +1,5 @@
 const MIN_PLAYERS = 1;
-const MAX_PLAYERS = 20;
+const MAX_PLAYERS = 10;
 
 const playerCountWords: Record<string, number> = {
   agyadu: 1,
@@ -182,7 +182,11 @@ export function parsePlayerCount(transcript: string): number | null {
       ([numberWord]) => numberWord === word,
     )?.[1];
 
-    if (wordValue !== undefined) {
+    if (
+      wordValue !== undefined &&
+      wordValue >= MIN_PLAYERS &&
+      wordValue <= MAX_PLAYERS
+    ) {
       return wordValue;
     }
   }
@@ -192,7 +196,11 @@ export function parsePlayerCount(transcript: string): number | null {
       differsByAtMostOneCharacter(word, numberWord),
     );
 
-    if (fuzzyMatch !== undefined) {
+    if (
+      fuzzyMatch !== undefined &&
+      fuzzyMatch[1] >= MIN_PLAYERS &&
+      fuzzyMatch[1] <= MAX_PLAYERS
+    ) {
       return fuzzyMatch[1];
     }
   }

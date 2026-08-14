@@ -31,13 +31,16 @@ export type ReplayDecisionLogEntry = {
 };
 
 export type ErrorLogEntry = {
+  componentStack?: string;
   createdAt: string;
   kind: "error";
   message: string;
   method?: string;
   path?: string;
   source: string;
+  stack?: string;
   statusCode?: number;
+  userAgent?: string;
 };
 
 export type GameLogEntry =

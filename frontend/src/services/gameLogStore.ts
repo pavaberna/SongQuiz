@@ -15,14 +15,25 @@ export function saveGameLogEntry(entry: GameLogEntry): void {
   });
 }
 
-export function saveGameError(error: unknown, source: string): void {
+type GameErrorDetails = {
+  componentStack?: string;
+};
+
+export function saveGameError(
+  error: unknown,
+  source: string,
+  details: GameErrorDetails = {},
+): void {
   const message = error instanceof Error ? error.message : String(error);
 
   saveGameLogEntry({
+    ...details,
     createdAt: new Date().toISOString(),
     kind: "error",
     message,
     source,
+    ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+    userAgent: navigator.userAgent,
   });
 }
 

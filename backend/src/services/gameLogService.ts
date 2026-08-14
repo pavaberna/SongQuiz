@@ -61,7 +61,11 @@ function isFrontendError(entry: Record<string, unknown>): boolean {
     typeof entry.message === "string" &&
     entry.message.length > 0 &&
     typeof entry.source === "string" &&
-    entry.source.length > 0
+    entry.source.length > 0 &&
+    (entry.componentStack === undefined ||
+      typeof entry.componentStack === "string") &&
+    (entry.stack === undefined || typeof entry.stack === "string") &&
+    (entry.userAgent === undefined || typeof entry.userAgent === "string")
   );
 }
 

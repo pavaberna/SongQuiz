@@ -29,10 +29,13 @@ export type GameLogEntry =
       transcript: string;
     }
   | {
+      componentStack?: string;
       createdAt: string;
       kind: "error";
       message: string;
       source: string;
+      stack?: string;
+      userAgent?: string;
     };
 
 export type GameLogUserSummary = {
