@@ -31,6 +31,13 @@ import { DEFAULT_GAME_SETTINGS } from "./config/gameSettings";
 import type { GameSettings } from "./types/settings";
 import { unlockAudioRecording } from "./audio/recordAudio";
 import { saveGameError } from "./services/gameLogStore";
+import {
+  pauseSoundEffects,
+  playSoundEffectSafely,
+  preloadSoundEffects,
+  resumeSoundEffects,
+  stopSoundEffects,
+} from "./services/soundEffectPlayer";
 
 function isSetupCancelled(error: unknown): boolean {
   return (
@@ -127,6 +134,7 @@ function App() {
     saveGameError(error, "game_setup");
     setupAbortControllerRef.current?.abort();
     stopVoicePlayback();
+    stopSoundEffects();
 
     try {
       await sendGameCommand("end");
@@ -212,7 +220,36 @@ function App() {
       playVoiceLine(language, preparationVoiceLineKey, signal),
     ).finally(() => setIsVoicePlaying(false));
 
-    await Promise.all([gamePromise, preparationVoicePromise]);
+    if (settings.playRules) {
+      await Promise.all([gamePromise, preparationVoicePromise]);
+    } else {
+      const introController = new AbortController();
+      const stopIntro = () => introController.abort();
+
+      signal.addEventListener("abort", stopIntro, { once: true });
+
+      const introPromise = preparationVoicePromise
+        .then(() =>
+          playSoundEffectSafely("intro", {
+            loop: true,
+            signal: introController.signal,
+            volume: 0.24,
+          }),
+        )
+        .catch((error: unknown) => {
+          if (!(error instanceof Error && error.name === "AbortError")) {
+            throw error;
+          }
+        });
+
+      try {
+        await Promise.all([gamePromise, preparationVoicePromise]);
+      } finally {
+        stopIntro();
+        signal.removeEventListener("abort", stopIntro);
+        await introPromise;
+      }
+    }
 
     const roundResult = await runSetupStep("first_round", () =>
       startRound(signal),
@@ -238,6 +275,10 @@ function App() {
 
   async function handleStart() {
     unlockAudioRecording();
+    void preloadSoundEffects([
+      "microphone_off",
+      "microphone_on",
+    ]);
 
     const setupController = new AbortController();
     setupAbortControllerRef.current?.abort();
@@ -337,18 +378,21 @@ function App() {
   function handleSetupCommand(command: GameCommand): void {
     if (command === "pause") {
       pauseVoicePlayback();
+      pauseSoundEffects();
       setIsSetupPaused(true);
       return;
     }
 
     if (command === "resume") {
       resumeVoicePlayback();
+      resumeSoundEffects();
       setIsSetupPaused(false);
       return;
     }
 
     setupAbortControllerRef.current?.abort();
     stopVoicePlayback();
+    stopSoundEffects();
 
     void sendGameCommand("end").catch((error: unknown) =>
       console.error(error),
@@ -361,6 +405,7 @@ function App() {
     setupAbortControllerRef.current?.abort();
     setupAbortControllerRef.current = null;
     stopVoicePlayback();
+    stopSoundEffects();
     setCurrentRound(null);
     setPlayers(null);
     setDecade(null);

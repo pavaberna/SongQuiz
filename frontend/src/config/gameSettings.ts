@@ -5,6 +5,7 @@ export const MAX_SONGS_PER_PLAYER = 10;
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
   hungarianSongMode: "mixed",
+  playAnswerSoundEffects: true,
   playRules: true,
   songsPerPlayer: 5,
 };

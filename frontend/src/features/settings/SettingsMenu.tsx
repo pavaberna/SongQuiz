@@ -33,6 +33,7 @@ const textByLanguage = {
     hungarianOnly: "Mind",
     mixed: "Vegyes",
     musicOrigin: "Magyar zenék",
+    playAnswerSoundEffects: "Válaszeffektek",
     playRules: "Játékszabályok felolvasása",
     settings: "Beállítások",
     songsPerPlayer: "Dalok játékosonként",
@@ -48,6 +49,7 @@ const textByLanguage = {
     hungarianOnly: "All",
     mixed: "Mixed",
     musicOrigin: "Hungarian songs",
+    playAnswerSoundEffects: "Answer sound effects",
     playRules: "Read the game rules",
     settings: "Settings",
     songsPerPlayer: "Songs per player",
@@ -212,6 +214,21 @@ export function SettingsMenu({
                 onChange({
                   ...settings,
                   playRules: event.target.checked,
+                })
+              }
+              type="checkbox"
+            />
+          </label>
+
+          <label className="mt-5 flex cursor-pointer items-center justify-between gap-4 border-t border-neutral-800 pt-4 text-sm font-bold text-neutral-200">
+            <span>{text.playAnswerSoundEffects}</span>
+            <input
+              checked={settings.playAnswerSoundEffects}
+              className="h-5 w-5 shrink-0 cursor-pointer accent-fuchsia-500"
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  playAnswerSoundEffects: event.target.checked,
                 })
               }
               type="checkbox"

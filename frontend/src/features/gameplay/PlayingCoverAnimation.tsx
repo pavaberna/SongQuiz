@@ -2,6 +2,7 @@ import { Play } from "lucide-react";
 import type { CSSProperties } from "react";
 
 type Ring = {
+  arcEnd: string;
   color: string;
   direction: "normal" | "reverse";
   glow: string;
@@ -11,6 +12,7 @@ type Ring = {
 
 const rings: Ring[] = [
   {
+    arcEnd: "320deg",
     color: "#06b6d4",
     direction: "normal",
     glow: "rgba(6, 182, 212, 0.7)",
@@ -18,6 +20,7 @@ const rings: Ring[] = [
     speed: "6s",
   },
   {
+    arcEnd: "312deg",
     color: "#ec4899",
     direction: "reverse",
     glow: "rgba(236, 72, 153, 0.7)",
@@ -25,6 +28,7 @@ const rings: Ring[] = [
     speed: "4.5s",
   },
   {
+    arcEnd: "302deg",
     color: "#f59e0b",
     direction: "normal",
     glow: "rgba(245, 158, 11, 0.7)",
@@ -32,6 +36,7 @@ const rings: Ring[] = [
     speed: "3s",
   },
   {
+    arcEnd: "288deg",
     color: "#a855f7",
     direction: "reverse",
     glow: "rgba(168, 85, 247, 0.7)",
@@ -60,6 +65,7 @@ export function PlayingCoverAnimation({
           key={ring.color}
           className={`song-neon-ring absolute rounded-full ${ring.size} ${isPlaying ? "song-ring-spin" : ""}`}
           style={{
+            "--song-ring-arc-end": ring.arcEnd,
             "--song-ring-color": ring.color,
             "--song-ring-glow": ring.glow,
             animationDirection: ring.direction,

@@ -86,6 +86,12 @@ import { isGameLogEntry } from "./services/gameLogService";
 import { requireAdmin } from "./middleware/requireAdmin";
 import { saveUserProfile } from "./services/userProfileStore";
 import { getGameLogUserSummaries } from "./services/adminGameLogService";
+import {
+  isRandomizedSoundEffectKey,
+  soundEffectKeys,
+  type SoundEffectKey,
+} from "./config/soundEffects";
+import { readSoundEffect } from "./services/soundEffectService";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -195,6 +201,44 @@ app.post("/api/dev/test-log", async (req, res) => {
     await appendGameLogEntry(req.body.entry);
     res.status(204).send();
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/dev/sound-effect-audio", async (req, res) => {
+  try {
+    const key = req.query.key;
+
+    if (
+      typeof key !== "string" ||
+      !soundEffectKeys.includes(key as SoundEffectKey)
+    ) {
+      res.status(400).json({ error: "Invalid sound effect key." });
+      return;
+    }
+
+    const audio = await readSoundEffect(key as SoundEffectKey);
+
+    res.setHeader(
+      "Cache-Control",
+      isRandomizedSoundEffectKey(key as SoundEffectKey)
+        ? "no-store"
+        : "private, max-age=86400",
+    );
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.send(audio);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      if (req.query.key === "intro") {
+        res.status(204).send();
+        return;
+      }
+
+      res.status(404).json({ error: "The sound effect is not available." });
+      return;
+    }
+
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
   }

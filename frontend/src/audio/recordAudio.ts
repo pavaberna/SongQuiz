@@ -3,6 +3,7 @@ import type {
   AudioRecordingResult,
   RecordAudioOptions,
 } from "../types/audio";
+import { playSoundEffectSafely } from "../services/soundEffectPlayer";
 
 const AUDIO_MIME_TYPE = "audio/webm";
 let recordingAudioContext: AudioContext | null = null;
@@ -32,6 +33,7 @@ export async function recordAudio(
   const {
     initialSpeechTimeoutMs,
     maximumDurationMs,
+    playMicrophoneOffSound = true,
     signal,
     silenceAfterSpeechMs,
   } = options;
@@ -56,6 +58,8 @@ export async function recordAudio(
   });
 
   try {
+    await playSoundEffectSafely("microphone_on", { signal });
+
     const chunks: Blob[] = [];
     const recorder = new MediaRecorder(stream, {
       mimeType: AUDIO_MIME_TYPE,
@@ -197,5 +201,9 @@ export async function recordAudio(
     });
   } finally {
     stream.getTracks().forEach((track) => track.stop());
+
+    if (playMicrophoneOffSound) {
+      await playSoundEffectSafely("microphone_off");
+    }
   }
 }

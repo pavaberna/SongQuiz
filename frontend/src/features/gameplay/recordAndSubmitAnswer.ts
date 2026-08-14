@@ -16,6 +16,7 @@ export async function recordAndSubmitAnswer(
   const recording = await recordAudio({
     initialSpeechTimeoutMs: INITIAL_SPEECH_TIMEOUT_MS,
     maximumDurationMs: ANSWER_MAXIMUM_RECORDING_MS,
+    playMicrophoneOffSound: false,
     signal,
     silenceAfterSpeechMs: ANSWER_SILENCE_AFTER_SPEECH_MS,
   });

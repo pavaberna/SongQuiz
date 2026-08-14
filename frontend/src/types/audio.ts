@@ -1,6 +1,7 @@
 export type RecordAudioOptions = {
   initialSpeechTimeoutMs: number;
   maximumDurationMs: number;
+  playMicrophoneOffSound?: boolean;
   signal?: AbortSignal;
   silenceAfterSpeechMs: number;
 };

@@ -5,6 +5,7 @@ export type HungarianSongMode =
 
 export type GameSettings = {
   hungarianSongMode: HungarianSongMode;
+  playAnswerSoundEffects: boolean;
   playRules: boolean;
   songsPerPlayer: number;
 };

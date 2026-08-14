@@ -22,6 +22,12 @@ import { AppHeader } from "../../components/layout/AppHeader";
 import { GameEndControls } from "./GameEndControls";
 import { GameResultsTable } from "./GameResultsTable";
 import { listenForReplayDecision } from "./listenForReplayDecision";
+import { getAnswerSoundEffect } from "./getAnswerSoundEffect";
+import {
+  playSoundEffectSafely,
+  stopSoundEffects,
+} from "../../services/soundEffectPlayer";
+import { MAX_ANSWER_SOUND_EFFECT_DURATION_MS } from "../../config/soundEffects";
 
 const textByLanguage = {
   hu: {
@@ -129,6 +135,7 @@ export function Gameplay({
     cancelAnswerRecording();
     cancelReplayDecision();
     stopVoicePlayback();
+    stopSoundEffects();
     setAnswerResponse(null);
     setGameSummary(null);
     setGameplayError(message);
@@ -147,6 +154,7 @@ export function Gameplay({
     cancelAnswerRecording();
     cancelReplayDecision();
     stopVoicePlayback();
+    stopSoundEffects();
     setIsCommandPending(true);
 
     try {
@@ -237,7 +245,8 @@ export function Gameplay({
     setPhase("answering");
 
     try {
-      const response = await recordAndSubmitAnswer(createAnswerSignal());
+      const answerSignal = createAnswerSignal();
+      const response = await recordAndSubmitAnswer(answerSignal);
 
       setAnswerResponse(response);
       if (!response.result.judgeResult.perfectMatch) {
@@ -255,6 +264,14 @@ export function Gameplay({
         });
       }
       setPhase("result");
+
+      if (settings.playAnswerSoundEffects) {
+        await playSoundEffectSafely(getAnswerSoundEffect(response), {
+          maximumDurationMs: MAX_ANSWER_SOUND_EFFECT_DURATION_MS,
+          signal: answerSignal,
+        });
+      }
+
       await playVoiceInstruction(language, response.voice);
 
       if (response.result.session.status === "finished") {

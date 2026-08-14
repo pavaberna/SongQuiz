@@ -132,10 +132,24 @@ textarea {
 }
 
 .song-neon-ring {
-  background: conic-gradient(
-    var(--song-ring-color) 0deg 324deg,
-    transparent 324deg 360deg
+  -webkit-mask: conic-gradient(
+    #000 0deg var(--song-ring-arc-end),
+    transparent var(--song-ring-arc-end) 360deg
   );
+  mask: conic-gradient(
+    #000 0deg var(--song-ring-arc-end),
+    transparent var(--song-ring-arc-end) 360deg
+  );
+}
+
+.song-neon-ring::before {
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    var(--song-ring-color) 0deg var(--song-ring-arc-end),
+    transparent var(--song-ring-arc-end) 360deg
+  );
+  content: "";
   filter:
     drop-shadow(0 0 4px var(--song-ring-color))
     drop-shadow(0 0 10px var(--song-ring-glow))

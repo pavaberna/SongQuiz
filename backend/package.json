@@ -7,7 +7,7 @@
     "dev:server": "ts-node-dev --respawn --transpile-only src/index.ts",
     "prisma:generate": "prisma generate",
     "clean": "rimraf dist",
-    "build": "npm run clean && tsc",
+    "build": "npm run clean && tsc && node dist/scripts/copyAssets.js",
     "start": "node dist/index.js",
     "studio": "cross-env BROWSER=none prisma studio",
     "repair:track-metadata": "npm run build && node dist/scripts/repairTrackMetadata.js"
