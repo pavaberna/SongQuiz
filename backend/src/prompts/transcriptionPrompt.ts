@@ -7,7 +7,7 @@ const transcriptionPrompts: Record<
 > = {
   en: {
     decade:
-      "Song Quiz setup. The speaker names a music decade or year, such as ten, twenty, 2000, 2010, 2020, eighties, nineties, two thousands, twenty tens, or mixed. Transcribe the number exactly as spoken.",
+      "Song Quiz setup. The speaker names a music decade or year, such as ten, twenty, 2000, 2010, 2020, eighties, nineties, or two thousands. They may also request an unrestricted period with words such as all, any, anything, all time, mixed, or random. Preserve the requested number or unrestricted-period phrase exactly as spoken.",
     genre:
       "Song Quiz setup. The speaker names one or more music genres, such as pop, rock, hip-hop, rap, electronic, jazz, metal, or classical. They may also request any genre with words such as all, any, anything, mixed, or random. Preserve every spoken genre or unrestricted-genre phrase and separate multiple genres with commas.",
     player_count:
@@ -19,7 +19,7 @@ const transcriptionPrompts: Record<
   },
   hu: {
     decade:
-      "Song Quiz zenei időszak. Lehetséges válaszok: nyolcvanas, kilencvenes, kétezres, kétezer, kétezer tíz, kétezer húsz, kétezer huszonöt, tízes, húszas vagy vegyes. A kétezer és a kétezer húsz két különböző válasz; a húsz szót ne hagyd el.",
+      "Song Quiz zenei időszak. Lehetséges válaszok: nyolcvanas, kilencvenes, kétezres, kétezer, kétezer tíz, kétezer húsz, kétezer huszonöt, tízes vagy húszas. A beszélő korlátozás nélküli időszakot is kérhet olyan kifejezésekkel, mint minden, bármi, mindegy, összes, minden idők, vegyes vagy akármi. A kétezer és a kétezer húsz két különböző válasz; a húsz szót ne hagyd el.",
     genre:
       "Song Quiz beállítás. A beszélő egy vagy több zenei műfajt mond, például pop, rock, hiphop, rap, elektronikus zene, jazz, metal vagy klasszikus zene. Azt is mondhatja, hogy minden, bármi, mindegy, összes, vegyes vagy akármi. Minden elhangzó műfajt vagy korlátozás nélküli választ őrizz meg, és több műfajt vesszővel válassz el.",
     player_count:

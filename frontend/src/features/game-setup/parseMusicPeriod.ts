@@ -71,6 +71,22 @@ const decadeAliases: Record<string, string> = {
 
   vegyes: "mixed",
   mixed: "mixed",
+  akarmi: "mixed",
+  all: "mixed",
+  "all decades": "mixed",
+  "all time": "mixed",
+  any: "mixed",
+  "any decade": "mixed",
+  anything: "mixed",
+  barmi: "mixed",
+  barmelyik: "mixed",
+  barmilyen: "mixed",
+  everything: "mixed",
+  mindegy: "mixed",
+  minden: "mixed",
+  "minden idok": "mixed",
+  osszes: "mixed",
+  random: "mixed",
 };
 
 const separators = [

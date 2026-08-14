@@ -18,7 +18,7 @@ function buildGenreRules(params: BuildSongListPromptParams): string {
     return `
 Genre variety rules:
 - No specific genre was requested.
-- Select a varied mix of genuinely different genres from the requested decade.
+- Select a varied mix of genuinely different genres from the requested music period.
 - Include pop, rock, hip-hop, electronic, alternative, and other culturally relevant styles where they existed in that period.
 - Do not let a single genre dominate the list.
 - Every song's genres array must contain its accurate genres.`;
@@ -42,12 +42,28 @@ Genre intersection rules (critical):
 - Every song's genres array must explicitly contain all requested genres. Additional accurate genres are allowed.`;
 }
 
+function buildMusicPeriodRules(params: BuildSongListPromptParams): string {
+  if (params.decade === "mixed") {
+    return `
+Music period rules:
+- No specific decade or year was requested.
+- Select songs from genuinely different decades and years.
+- Spread the songs across at least four different decades when the requested song count allows it.
+- Do not let one decade dominate the list.
+- Every song's year must be its accurate original release year.`;
+  }
+
+  return `
+Music period rules:
+- Every song's year must match the requested music period: ${params.decade}.`;
+}
+
 function buildSongOriginRules(params: BuildSongListPromptParams): string {
   if (params.hungarianSongCount === params.generatedSongCount) {
     return `
 1. Hungarian music:
    - Every song must be Hungarian.
-   - Include Hungarian artists representing the selected decade and requested genre mix.
+   - Include Hungarian artists representing the selected music period and requested genre mix.
    - Choose mainstream radio hits or well-known local tracks with a solid following in Hungary.
 
 2. International music:
@@ -68,7 +84,7 @@ function buildSongOriginRules(params: BuildSongListPromptParams): string {
   return `
 1. Hungarian music integration:
    - Include exactly ${params.hungarianSongCount} Hungarian songs.
-   - Include Hungarian artists representing the selected decade and requested genre mix.
+   - Include Hungarian artists representing the selected music period and requested genre mix.
    - These can be mainstream radio hits or solid mid-tier, indie, or hip-hop tracks that have at least a solid local following in Hungary.
 
 2. International and European music:
@@ -78,6 +94,10 @@ function buildSongOriginRules(params: BuildSongListPromptParams): string {
 }
 
 export function buildSongListPrompt(params: BuildSongListPromptParams): string {
+  const requestedPeriodText =
+    params.decade === "mixed"
+      ? "Any year or decade (balanced random mix)"
+      : params.decade;
   const requestedGenresText =
     params.requestedGenres.length === 0
       ? "Any genre (random mix)"
@@ -93,7 +113,7 @@ export function buildSongListPrompt(params: BuildSongListPromptParams): string {
 You are an expert music curator for a song quiz app played specifically by Hungarian users.
 
 Create exactly ${params.generatedSongCount} real, existing songs matching this setup:
-- Decade: ${params.decade}
+- Music period: ${requestedPeriodText}
 - Requested genres: ${requestedGenresText}
 - Curation focus: ${params.curationFocus}
 - Variation ID: ${params.variationId}
@@ -110,6 +130,8 @@ Each item must have exactly this shape:
 }
 
 Selection and cultural relevance rules (critical for Hungarian players):
+${buildMusicPeriodRules(params)}
+
 ${buildGenreRules(params)}
 
 ${buildSongOriginRules(params)}
@@ -135,7 +157,6 @@ General rules:
 - Do not repeatedly default to the most obvious artist or song for this setup.
 - Vary artists: avoid using the same artist more than once unless the requested pool would otherwise be too small.
 - Use real, existing songs only.
-- The year must match the requested decade.
 - The artist field must include every officially credited primary, co-primary, and featured artist. Never omit collaborating artists or shorten a multi-artist credit to only the first artist.
 
 Strict Accuracy Constraint:
