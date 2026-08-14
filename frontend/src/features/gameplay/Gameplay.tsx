@@ -402,7 +402,6 @@ export function Gameplay({
 
             {youtubeId !== null && (
               <SongPlayer
-                key={playbackId}
                 clipDuration={currentRound.clipDuration}
                 coverText={text.cover}
                 manualPlayText={text.manualPlay}

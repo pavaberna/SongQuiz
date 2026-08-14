@@ -59,7 +59,6 @@ export function SongPlayer({
         window.clearTimeout(autoplayTimerRef.current);
       }
 
-      playerRef.current?.stopVideo();
       playerRef.current = null;
     };
   }, []);
