@@ -86,10 +86,19 @@ export function Gameplay({
   const [isPaused, setIsPaused] = useState(false);
   const [isCommandPending, setIsCommandPending] = useState(false);
 
+  const activePlaybackIdRef = useRef<string | null>(null);
   const answerAbortControllerRef = useRef<AbortController | null>(null);
+  const answeringPlaybackIdRef = useRef<string | null>(null);
   const replayAbortControllerRef = useRef<AbortController | null>(null);
 
   const youtubeId = currentRound.currentSong.youtubeId;
+  const playbackId = [
+    currentRound.roundNumber,
+    currentRound.currentPlayer.id,
+    youtubeId,
+    currentRound.startOffset,
+  ].join(":");
+  activePlaybackIdRef.current = playbackId;
 
   function createAnswerSignal(): AbortSignal {
     answerAbortControllerRef.current?.abort();
@@ -103,6 +112,7 @@ export function Gameplay({
   function cancelAnswerRecording(): void {
     answerAbortControllerRef.current?.abort();
     answerAbortControllerRef.current = null;
+    answeringPlaybackIdRef.current = null;
   }
 
   function cancelReplayDecision(): void {
@@ -185,7 +195,7 @@ export function Gameplay({
         setIsPaused(false);
 
         if (phase === "answering") {
-          void handleClipComplete();
+          void handleClipComplete(playbackId, true);
         }
 
         return;
@@ -207,7 +217,22 @@ export function Gameplay({
     }
   }
 
-  async function handleClipComplete() {
+  async function handleClipComplete(
+    completedPlaybackId: string,
+    isResumingAnswer = false,
+  ) {
+    const expectedPhase = isResumingAnswer ? "answering" : "playing";
+
+    if (
+      completedPlaybackId !== activePlaybackIdRef.current ||
+      answeringPlaybackIdRef.current === completedPlaybackId ||
+      phase !== expectedPhase ||
+      (!isResumingAnswer && isPaused)
+    ) {
+      return;
+    }
+
+    answeringPlaybackIdRef.current = completedPlaybackId;
     setGameplayError(null);
     setPhase("answering");
 
@@ -377,13 +402,15 @@ export function Gameplay({
 
             {youtubeId !== null && (
               <SongPlayer
+                key={playbackId}
                 clipDuration={currentRound.clipDuration}
                 coverText={text.cover}
                 manualPlayText={text.manualPlay}
                 isCovered={phase !== "result"}
-                isPaused={isPaused}
+                isPaused={isPaused || phase !== "playing"}
                 onComplete={handleClipComplete}
                 onError={(message) => handleGameplayFailure(new Error(message))}
+                playbackId={playbackId}
                 startOffset={currentRound.startOffset}
                 youtubeId={youtubeId}
               />

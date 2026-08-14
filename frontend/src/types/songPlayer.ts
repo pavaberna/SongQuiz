@@ -3,8 +3,9 @@ export type SongPlayerProps = {
   coverText: string;
   isCovered: boolean;
   manualPlayText: string;
-  onComplete: () => void;
+  onComplete: (playbackId: string) => void;
   onError: (message: string) => void;
+  playbackId: string;
   startOffset: number;
   youtubeId: string;
   isPaused: boolean;

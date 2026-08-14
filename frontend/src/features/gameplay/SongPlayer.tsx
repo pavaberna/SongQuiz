@@ -16,6 +16,7 @@ export function SongPlayer({
   startOffset,
   youtubeId,
   manualPlayText,
+  playbackId,
 }: SongPlayerProps) {
   const autoplayTimerRef = useRef<number | null>(null);
   const activePlaybackKeyRef = useRef<string | null>(null);
@@ -26,8 +27,6 @@ export function SongPlayer({
     null,
   );
   const [manualPlayRequired, setManualPlayRequired] = useState(false);
-  const playbackKey = `${youtubeId}:${startOffset}`;
-
   const startClip = useCallback(
     (player: YouTubePlayer) => {
       if (autoplayTimerRef.current !== null) {
@@ -59,6 +58,9 @@ export function SongPlayer({
       if (autoplayTimerRef.current !== null) {
         window.clearTimeout(autoplayTimerRef.current);
       }
+
+      playerRef.current?.stopVideo();
+      playerRef.current = null;
     };
   }, []);
 
@@ -107,12 +109,12 @@ export function SongPlayer({
       autoplayTimerRef.current = null;
     }
 
-    if (activePlaybackKeyRef.current !== playbackKey) {
-      activePlaybackKeyRef.current = playbackKey;
+    if (activePlaybackKeyRef.current !== playbackId) {
+      activePlaybackKeyRef.current = playbackId;
       playbackStartedAtRef.current = performance.now();
     }
 
-    setActivePlaybackKey(playbackKey);
+    setActivePlaybackKey(playbackId);
     setManualPlayRequired(false);
   };
 
@@ -128,27 +130,33 @@ export function SongPlayer({
     }
   };
 
-  const handleEnd: YouTubeProps["onEnd"] = () => {
+  const handleEnd: YouTubeProps["onEnd"] = (event) => {
     const playbackStartedAt = playbackStartedAtRef.current;
     const minimumPlaybackDurationMs = Math.max(
       0,
       clipDuration * 1000 - COMPLETION_TOLERANCE_MS,
     );
+    const minimumExpectedPosition =
+      startOffset + clipDuration - COMPLETION_TOLERANCE_MS / 1000;
+    const currentPosition = event.target.getCurrentTime();
 
     if (
-      activePlaybackKeyRef.current !== playbackKey ||
-      completedPlaybackKeyRef.current === playbackKey ||
+      activePlaybackKeyRef.current !== playbackId ||
+      completedPlaybackKeyRef.current === playbackId ||
       playbackStartedAt === null ||
-      performance.now() - playbackStartedAt < minimumPlaybackDurationMs
+      performance.now() - playbackStartedAt < minimumPlaybackDurationMs ||
+      !Number.isFinite(currentPosition) ||
+      currentPosition < minimumExpectedPosition
     ) {
       return;
     }
 
-    completedPlaybackKeyRef.current = playbackKey;
+    completedPlaybackKeyRef.current = playbackId;
     activePlaybackKeyRef.current = null;
     playbackStartedAtRef.current = null;
     setActivePlaybackKey(null);
-    onComplete();
+    event.target.pauseVideo();
+    onComplete(playbackId);
     if (autoplayTimerRef.current !== null) {
       window.clearTimeout(autoplayTimerRef.current);
       autoplayTimerRef.current = null;
@@ -192,7 +200,7 @@ export function SongPlayer({
       <TimedProgressBar
         durationSeconds={clipDuration}
         isPaused={isPaused}
-        isRunning={activePlaybackKey === playbackKey}
+        isRunning={activePlaybackKey === playbackId}
       />
     </div>
   );
