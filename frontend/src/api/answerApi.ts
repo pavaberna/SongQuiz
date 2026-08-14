@@ -7,6 +7,7 @@ export async function submitAudioAnswer(
   audio: Blob,
   signal?: AbortSignal,
 ): Promise<SubmitAudioAnswerResponse> {
+  const startedAt = performance.now();
   const formData = new FormData();
 
   formData.append("audio", audio, "answer.webm");
@@ -18,6 +19,11 @@ export async function submitAudioAnswer(
     method: "POST",
     signal,
   });
+  const serverTiming = response.headers.get("Server-Timing");
+
+  console.info(
+    `[timing] answer request total=${Math.round(performance.now() - startedAt)}ms${serverTiming ? ` server=${serverTiming}` : ""}`,
+  );
 
   if (!response.ok) {
     const errorData = (await response

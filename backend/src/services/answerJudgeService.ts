@@ -1,5 +1,6 @@
 import { buildAnswerJudgePrompt } from "../prompts/answerJudgePrompt";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { answerJudgeResponseSchema } from "../schemas/answerJudgeSchema";
 import { JudgeSongAnswerParams, JudgeSongAnswerResult } from "../types/answer";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
@@ -28,6 +29,14 @@ export async function judgeSongAnswer(
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
     contents: prompt,
+    config: {
+      maxOutputTokens: 150,
+      responseJsonSchema: answerJudgeResponseSchema,
+      responseMimeType: "application/json",
+      thinkingConfig: {
+        thinkingLevel: ThinkingLevel.MINIMAL,
+      },
+    },
   });
   const rawText = response.text?.trim();
   if (!rawText) {

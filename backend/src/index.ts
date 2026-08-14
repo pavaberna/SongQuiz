@@ -110,6 +110,7 @@ const allowedFrontendOrigins = (
 app.use(
   cors({
     credentials: true,
+    exposedHeaders: ["Server-Timing"],
     origin(origin, callback) {
       if (!origin || allowedFrontendOrigins.includes(origin)) {
         callback(null, true);
@@ -762,6 +763,11 @@ app.post(
       const answerMs = performance.now() - answerStartedAt;
 
       const voice = createAnswerVoiceInstruction(result);
+
+      res.setHeader(
+        "Server-Timing",
+        `transcription;dur=${transcriptionMs.toFixed(1)}, judge;dur=${answerMs.toFixed(1)}`,
+      );
 
       console.info(
         `[timing] submit audio answer total=${Math.round(performance.now() - startedAt)}ms transcription=${Math.round(transcriptionMs)}ms answer=${Math.round(answerMs)}ms skipped=${result.skipped}`,
