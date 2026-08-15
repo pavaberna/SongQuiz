@@ -2,6 +2,7 @@ import { readCurrentSongList, saveCurrentSongListFile } from "./songListStore";
 import {
   findYoutubeVideoForSong,
   isYoutubeQuotaExceededError,
+  isYoutubeVideoEmbeddable,
 } from "./youtubeService";
 import type { CurrentSongListFile } from "../types/song";
 import { findCachedTrackBySong, saveTrackToCache } from "./trackRepository";
@@ -62,7 +63,7 @@ async function enrichSongWithCacheOrYoutube(
 ): Promise<EnrichmentSource> {
   const cachedTrack = await findCachedTrackBySong(song.artist, song.title);
 
-  if (cachedTrack) {
+  if (cachedTrack && (await isYoutubeVideoEmbeddable(cachedTrack.youtubeId))) {
     song.youtubeId = cachedTrack.youtubeId;
     song.duration = cachedTrack.duration;
     song.viewCount =

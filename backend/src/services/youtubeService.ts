@@ -1,5 +1,7 @@
+import axios from "axios";
 import { google } from "googleapis";
 import { parse, toSeconds } from "iso8601-duration";
+import YouTube from "youtube-sr";
 import {
   MIN_PLAYABLE_DURATION_SECONDS,
   MAX_PLAYABLE_DURATION_SECONDS,
@@ -49,17 +51,17 @@ function getPacificDateKey(): string {
   return pacificDateFormatter.format(new Date());
 }
 
-function assertYoutubeQuotaAvailable(): void {
+function isYoutubeQuotaCurrentlyExhausted(): boolean {
   if (quotaExhaustedDate === null) {
-    return;
+    return false;
   }
 
   if (quotaExhaustedDate !== getPacificDateKey()) {
     quotaExhaustedDate = null;
-    return;
+    return false;
   }
 
-  throw new YoutubeQuotaExceededError();
+  return true;
 }
 
 function isGoogleQuotaExceededError(error: unknown): boolean {
@@ -81,15 +83,12 @@ function isGoogleQuotaExceededError(error: unknown): boolean {
   return (
     status === 403 &&
     reasons.some(
-      (reason) =>
-        reason === "quotaExceeded" || reason === "dailyLimitExceeded",
+      (reason) => reason === "quotaExceeded" || reason === "dailyLimitExceeded",
     )
   );
 }
 
 async function runYoutubeRequest<T>(request: () => Promise<T>): Promise<T> {
-  assertYoutubeQuotaAvailable();
-
   try {
     return await request();
   } catch (error) {
@@ -105,6 +104,50 @@ async function runYoutubeRequest<T>(request: () => Promise<T>): Promise<T> {
 export async function findYoutubeVideoForSong(
   params: FindYoutubeVideoParams,
 ): Promise<YoutubeSongMatch> {
+  const query = `${params.artist} ${params.title} official audio`;
+
+  if (isYoutubeQuotaCurrentlyExhausted()) {
+    return findYoutubeVideoOrQuotaError(
+      params,
+      query,
+      new YoutubeQuotaExceededError(),
+    );
+  }
+
+  try {
+    return await findYoutubeVideoUsingOfficialApi(params, query);
+  } catch (error) {
+    if (isYoutubeQuotaExceededError(error)) {
+      console.warn(
+        "YouTube API quota exhausted, falling back to youtube-sr search.",
+      );
+
+      return findYoutubeVideoOrQuotaError(params, query, error);
+    }
+
+    throw error;
+  }
+}
+
+// Keeps the original quota error visible to callers (e.g. to trigger the DB
+// cache fallback) whenever the fallback search can't find a match either.
+async function findYoutubeVideoOrQuotaError(
+  params: FindYoutubeVideoParams,
+  query: string,
+  quotaError: YoutubeQuotaExceededError,
+): Promise<YoutubeSongMatch> {
+  try {
+    return await findYoutubeVideoUsingFallbackSearch(params, query);
+  } catch (fallbackError) {
+    console.warn("Fallback YouTube search also failed:", fallbackError);
+    throw quotaError;
+  }
+}
+
+async function findYoutubeVideoUsingOfficialApi(
+  params: FindYoutubeVideoParams,
+  query: string,
+): Promise<YoutubeSongMatch> {
   const apiKey = process.env.YOUTUBE_API_KEY;
 
   if (!apiKey) {
@@ -115,8 +158,6 @@ export async function findYoutubeVideoForSong(
     version: "v3",
     auth: apiKey,
   });
-
-  const query = `${params.artist} ${params.title} official audio`;
 
   const searchResponse = await runYoutubeRequest(() =>
     youtube.search.list({
@@ -145,7 +186,7 @@ export async function findYoutubeVideoForSong(
     }),
   );
 
-  let correctionAttempted = false;
+  const videoMatches: YoutubeVideoMatch[] = [];
 
   for (const video of videoResponse.data.items ?? []) {
     const youtubeId = video.id;
@@ -173,7 +214,7 @@ export async function findYoutubeVideoForSong(
       continue;
     }
 
-    const videoMatch: YoutubeVideoMatch = {
+    videoMatches.push({
       youtubeId,
       duration,
       videoTitle,
@@ -181,11 +222,98 @@ export async function findYoutubeVideoForSong(
       description,
       embeddable,
       viewCount,
-    };
+    });
+  }
 
+  return selectMatchingVideo(params, videoMatches, query);
+}
+
+async function findYoutubeVideoUsingFallbackSearch(
+  params: FindYoutubeVideoParams,
+  query: string,
+): Promise<YoutubeSongMatch> {
+  const searchResults = await YouTube.search(query, {
+    limit: 8,
+    type: "video",
+  });
+
+  const videoMatches: YoutubeVideoMatch[] = [];
+
+  for (const video of searchResults) {
+    const youtubeId = video.id;
+    const videoTitle = video.title;
+    const channelTitle = video.channel?.name;
+    const viewCount = video.views;
+
+    if (
+      !youtubeId ||
+      !videoTitle ||
+      !channelTitle ||
+      video.duration == null ||
+      !Number.isSafeInteger(viewCount)
+    ) {
+      continue;
+    }
+
+    const duration = Math.round(video.duration / 1000);
+
+    if (!isPlayableDuration(duration)) {
+      continue;
+    }
+
+    videoMatches.push({
+      youtubeId,
+      duration,
+      videoTitle,
+      channelTitle,
+      description: (video.description ?? "").slice(0, 1000),
+      embeddable: true,
+      viewCount,
+    });
+  }
+
+  return selectMatchingVideo(
+    params,
+    videoMatches,
+    query,
+    isYoutubeVideoEmbeddable,
+  );
+}
+
+export async function isYoutubeVideoEmbeddable(
+  youtubeId: string,
+): Promise<boolean> {
+  try {
+    await axios.get("https://www.youtube.com/oembed", {
+      params: {
+        format: "json",
+        url: `https://www.youtube.com/watch?v=${youtubeId}`,
+      },
+      timeout: 5000,
+    });
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function selectMatchingVideo(
+  params: FindYoutubeVideoParams,
+  videoMatches: YoutubeVideoMatch[],
+  query: string,
+  verifyEmbeddable?: (youtubeId: string) => Promise<boolean>,
+): Promise<YoutubeSongMatch> {
+  let correctionAttempted = false;
+
+  for (const videoMatch of videoMatches) {
     const validation = validateSongVideo(params, videoMatch);
 
     if (validation.blocked || !validation.artistMatches) {
+      continue;
+    }
+
+    if (verifyEmbeddable && !(await verifyEmbeddable(videoMatch.youtubeId))) {
       continue;
     }
 
@@ -222,5 +350,6 @@ export async function findYoutubeVideoForSong(
       };
     }
   }
+
   throw new Error(`No matching playable YouTube video found for: ${query}`);
 }

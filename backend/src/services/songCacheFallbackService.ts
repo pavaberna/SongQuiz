@@ -2,7 +2,10 @@ import type { Track } from "@prisma/client";
 
 import type { CurrentSongListFile, StoredSong } from "../types/song";
 import { hasPlayableYoutubeData } from "../utils/songValidation";
-import { matchesEveryRequestedGenre, getRequestedGenres } from "./songGenreService";
+import {
+  matchesEveryRequestedGenre,
+  getRequestedGenres,
+} from "./songGenreService";
 import { shuffleSongs } from "./songDiversityService";
 import {
   getUniqueSongs,
@@ -10,11 +13,9 @@ import {
   readSongHistory,
   songsHaveSameIdentity,
 } from "./songHistoryStore";
-import {
-  readCurrentSongList,
-  saveCurrentSongListFile,
-} from "./songListStore";
+import { readCurrentSongList, saveCurrentSongListFile } from "./songListStore";
 import { findCachedTracksByYearRange } from "./trackRepository";
+import { isYoutubeVideoEmbeddable } from "./youtubeService";
 
 export type CacheFallbackResult = {
   added: number;
@@ -51,25 +52,37 @@ export async function addCachedTracksToCurrentSongList(): Promise<CacheFallbackR
     cachedTracks
       .filter(
         (track) =>
-          !songList.songs.some((song) =>
-            songsHaveSameIdentity(song, track),
-          ) && matchesEveryRequestedGenre(track.genres, requestedGenres),
+          !songList.songs.some((song) => songsHaveSameIdentity(song, track)) &&
+          matchesEveryRequestedGenre(track.genres, requestedGenres),
       )
       .map(trackToStoredSong)
       .filter(hasPlayableYoutubeData),
   );
+  const embeddableCachedSongs = (
+    await Promise.all(
+      matchingCachedSongs.map(async (song) => {
+        if (!song.youtubeId) {
+          return { embeddable: false, song };
+        }
+
+        return {
+          embeddable: await isYoutubeVideoEmbeddable(song.youtubeId),
+          song,
+        };
+      }),
+    )
+  )
+    .filter(({ embeddable }) => embeddable)
+    .map(({ song }) => song);
   const { freshSongs, recentSongs } = partitionSongsByHistory(
-    matchingCachedSongs,
+    embeddableCachedSongs,
     songHistory,
   );
   const fallbackSongs = [...shuffleSongs(freshSongs), ...recentSongs].slice(
     0,
     missingBeforeFallback,
   );
-  const reusedSongCount = Math.max(
-    fallbackSongs.length - freshSongs.length,
-    0,
-  );
+  const reusedSongCount = Math.max(fallbackSongs.length - freshSongs.length, 0);
 
   if (reusedSongCount > 0) {
     console.warn(
@@ -89,9 +102,10 @@ export async function addCachedTracksToCurrentSongList(): Promise<CacheFallbackR
   };
 }
 
-function getYearRange(
-  musicPeriod: string,
-): { minimumYear?: number; maximumYear?: number } {
+function getYearRange(musicPeriod: string): {
+  minimumYear?: number;
+  maximumYear?: number;
+} {
   if (musicPeriod === "mixed") {
     return {};
   }
